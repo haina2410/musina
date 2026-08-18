@@ -68,10 +68,13 @@ describe('UwufufuImporter', () => {
     }), { status: 200 }));
     const importer = new UwufufuImporter(fetcher);
 
-    await expect(importer.load(selectionsUrl)).resolves.toEqual([
-      'https://www.youtube.com/watch?v=FN7ALfpGxiI',
-      'https://www.youtube.com/watch?v=30KI5SuECuc',
-    ]);
+    await expect(importer.load(selectionsUrl)).resolves.toEqual({
+      skipped: 2,
+      urls: [
+        'https://www.youtube.com/watch?v=FN7ALfpGxiI',
+        'https://www.youtube.com/watch?v=30KI5SuECuc',
+      ],
+    });
     expect(fetcher).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls[0]?.[0]).toBe(selectionsUrl);
     expect(fetcher.mock.calls[0]?.[1]).toEqual(expect.objectContaining({

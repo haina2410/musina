@@ -4,6 +4,11 @@ interface SelectionPayload {
   data?: unknown;
 }
 
+export interface ImportedSelectionPage {
+  skipped: number;
+  urls: string[];
+}
+
 export function isUwufufuSelectionsUrl(input: string): boolean {
   try {
     const url = new URL(input);
@@ -33,7 +38,7 @@ function youtubeWatchUrl(value: unknown): string | null {
 export class UwufufuImporter {
   constructor(private readonly fetcher: Fetcher = fetch) {}
 
-  async load(input: string): Promise<string[]> {
+  async load(input: string): Promise<ImportedSelectionPage> {
     if (!isUwufufuSelectionsUrl(input)) {
       throw new Error('That is not a supported UwUFUFU selections URL.');
     }
@@ -59,6 +64,6 @@ export class UwufufuImporter {
       return url ? [url] : [];
     });
     if (urls.length === 0) throw new Error('UwUFUFU returned no playable YouTube entries.');
-    return urls;
+    return { skipped: payload.data.length - urls.length, urls };
   }
 }

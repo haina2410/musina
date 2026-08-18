@@ -1,8 +1,17 @@
 # Musina
 
-Musina is a small Discord voice bot. Use `/play <url>` or mention the bot with a
-YouTube or SoundCloud link; it joins your current voice channel and starts playing.
-Later requests are queued per server.
+Musina is a small Discord voice bot. Use `/play <url>` with a YouTube or
+SoundCloud link, or mention the bot with one of those links; it joins your current
+voice channel and starts playing. Later requests are queued per server.
+
+`/play` also accepts an UwUFUFU selections API URL and imports the usable YouTube
+videos from that response page in order. It does not fetch additional pages.
+Invalid or unavailable entries are skipped, and the configured queue capacity is
+still enforced. For example:
+
+```text
+https://api.uwufufu.com/v1/selections?page=1&perPage=10&worldcupId=168808
+```
 
 ## Requirements
 

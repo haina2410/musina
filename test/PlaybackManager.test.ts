@@ -100,6 +100,14 @@ describe('PlaybackManager.enqueueMany', () => {
     expect(manager.queue('guild-1')).toBe('Now: **One**\n1. Two');
   });
 
+  it('includes entries rejected by the list importer in the skipped count', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+
+    await expect(manager.enqueueMany(member, textChannel, ['one'], 2))
+      .resolves.toBe('Imported 1 track (2 skipped). Now playing **One**.');
+  });
+
   it('fails without creating a session when every candidate fails inspection', async () => {
     const { inspect, manager, member, textChannel } = fixture();
     inspect.mockRejectedValue(new Error('unavailable'));

@@ -28,7 +28,7 @@
 
 **Interfaces:**
 - Consumes: platform `fetch(input, init)` and `URL`.
-- Produces: `isUwufufuSelectionsUrl(input: string): boolean` and `UwufufuImporter.load(input: string): Promise<string[]>`.
+- Produces: `isUwufufuSelectionsUrl(input: string): boolean` and `UwufufuImporter.load(input: string): Promise<{ skipped: number; urls: string[] }>`.
 
 - [ ] **Step 1: Write failing URL-policy tests**
 
@@ -112,10 +112,13 @@ describe('UwufufuImporter', () => {
 
     await expect(importer.load(
       'https://api.uwufufu.com/v1/selections?page=1&perPage=4&worldcupId=168808',
-    )).resolves.toEqual([
-      'https://www.youtube.com/watch?v=FN7ALfpGxiI',
-      'https://www.youtube.com/watch?v=30KI5SuECuc',
-    ]);
+    )).resolves.toEqual({
+      skipped: 2,
+      urls: [
+        'https://www.youtube.com/watch?v=FN7ALfpGxiI',
+        'https://www.youtube.com/watch?v=30KI5SuECuc',
+      ],
+    });
     expect(fetcher).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
       redirect: 'error',
       signal: expect.any(AbortSignal),
@@ -168,6 +171,11 @@ interface SelectionPayload {
   data?: unknown;
 }
 
+interface ImportedSelectionPage {
+  skipped: number;
+  urls: string[];
+}
+
 function youtubeWatchUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   try {
@@ -183,7 +191,7 @@ function youtubeWatchUrl(value: unknown): string | null {
 export class UwufufuImporter {
   constructor(private readonly fetcher: Fetcher = fetch) {}
 
-  async load(input: string): Promise<string[]> {
+  async load(input: string): Promise<ImportedSelectionPage> {
     if (!isUwufufuSelectionsUrl(input)) throw new Error('That is not a supported UwUFUFU selections URL.');
     const response = await this.fetcher(input, {
       redirect: 'error',
@@ -205,7 +213,7 @@ export class UwufufuImporter {
       return url ? [url] : [];
     });
     if (urls.length === 0) throw new Error('UwUFUFU returned no playable YouTube entries.');
-    return urls;
+    return { skipped: payload.data.length - urls.length, urls };
   }
 }
 ```
@@ -233,7 +241,7 @@ git commit -m "feat: parse UwUFUFU selection pages"
 
 **Interfaces:**
 - Consumes: ordered media URLs from `UwufufuImporter.load` and existing `YtDlpResolver.inspect`.
-- Produces: `PlaybackManager.enqueueMany(member: GuildMember, textChannel: SendableChannels, urls: readonly string[]): Promise<string>`.
+- Produces: `PlaybackManager.enqueueMany(member: GuildMember, textChannel: SendableChannels, urls: readonly string[], initialSkipped?: number): Promise<string>`.
 
 - [ ] **Step 1: Write failing bulk enqueue tests**
 
@@ -365,10 +373,11 @@ async enqueueMany(
   member: GuildMember,
   textChannel: SendableChannels,
   urls: readonly string[],
+  initialSkipped = 0,
 ): Promise<string> {
   const voiceChannel = this.requirePlaybackChannel(member);
   let added = 0;
-  let skipped = 0;
+  let skipped = initialSkipped;
   let firstResult = '';
 
   for (const [index, url] of urls.entries()) {
@@ -428,7 +437,7 @@ git commit -m "feat: enqueue ordered track batches"
 
 **Interfaces:**
 - Consumes: `UwufufuImporter.load(input)` and `PlaybackManager.enqueueMany(member, channel, urls)` from Tasks 1 and 2.
-- Produces: `PlayInput.resolve(input: string): Promise<{ kind: 'batch'; urls: string[] } | { kind: 'single'; url: string }>` used by the Discord command handler.
+- Produces: `PlayInput.resolve(input: string): Promise<{ kind: 'batch'; skipped: number; urls: string[] } | { kind: 'single'; url: string }>` used by the Discord command handler.
 
 - [ ] **Step 1: Write failing play-input routing tests**
 
@@ -448,9 +457,10 @@ describe('PlayInput', () => {
 
   it('loads a supported UwUFUFU selections URL as a batch', async () => {
     const input = 'https://api.uwufufu.com/v1/selections?page=1&perPage=10&worldcupId=168808';
-    const importer = { load: vi.fn().mockResolvedValue(['https://youtu.be/one']) };
+    const importer = { load: vi.fn().mockResolvedValue({ skipped: 0, urls: ['https://youtu.be/one'] }) };
     await expect(new PlayInput(importer as never).resolve(input)).resolves.toEqual({
       kind: 'batch',
+      skipped: 0,
       urls: ['https://youtu.be/one'],
     });
     expect(importer.load).toHaveBeenCalledWith(input);
@@ -472,7 +482,7 @@ Create `src/playback/PlayInput.ts`:
 import { UwufufuImporter, isUwufufuSelectionsUrl } from '../importers/UwufufuImporter.js';
 
 type ResolvedPlayInput =
-  | { kind: 'batch'; urls: string[] }
+  | { kind: 'batch'; skipped: number; urls: string[] }
   | { kind: 'single'; url: string };
 
 export class PlayInput {
@@ -480,7 +490,7 @@ export class PlayInput {
 
   async resolve(input: string): Promise<ResolvedPlayInput> {
     if (isUwufufuSelectionsUrl(input)) {
-      return { kind: 'batch', urls: await this.uwufufu.load(input) };
+      return { kind: 'batch', ...await this.uwufufu.load(input) };
     }
     return { kind: 'single', url: input };
   }
@@ -503,7 +513,7 @@ const playInput = new PlayInput();
 // Inside the /play branch:
 const input = await playInput.resolve(interaction.options.getString('url', true));
 const result = input.kind === 'batch'
-  ? await playback.enqueueMany(interaction.member, interaction.channel, input.urls)
+  ? await playback.enqueueMany(interaction.member, interaction.channel, input.urls, input.skipped)
   : await playback.enqueue(interaction.member, interaction.channel, input.url);
 ```
 

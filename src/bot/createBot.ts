@@ -7,9 +7,11 @@ import {
 } from 'discord.js';
 import type { Logger } from 'pino';
 import type { PlaybackManager } from '../playback/PlaybackManager.js';
+import { PlayInput } from '../playback/PlayInput.js';
 import { findSupportedUrl } from '../playback/urlPolicy.js';
 
 export function createBot(playback: PlaybackManager, logger: Logger): Client {
+  const playInput = new PlayInput();
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -22,7 +24,7 @@ export function createBot(playback: PlaybackManager, logger: Logger): Client {
 
   client.on('ready', (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
   client.on('interactionCreate', (interaction) => {
-    if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, logger);
+    if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
   });
   client.on('messageCreate', (message) => void handleMessage(message, playback, logger));
   return client;
@@ -31,6 +33,7 @@ export function createBot(playback: PlaybackManager, logger: Logger): Client {
 async function handleCommand(
   interaction: ChatInputCommandInteraction,
   playback: PlaybackManager,
+  playInput: PlayInput,
   logger: Logger,
 ): Promise<void> {
   if (!interaction.inCachedGuild() || !interaction.channel?.isSendable()) {
@@ -40,11 +43,10 @@ async function handleCommand(
   try {
     if (interaction.commandName === 'play') {
       await interaction.deferReply();
-      const result = await playback.enqueue(
-        interaction.member,
-        interaction.channel,
-        interaction.options.getString('url', true),
-      );
+      const input = await playInput.resolve(interaction.options.getString('url', true));
+      const result = input.kind === 'batch'
+        ? await playback.enqueueMany(interaction.member, interaction.channel, input.urls, input.skipped)
+        : await playback.enqueue(interaction.member, interaction.channel, input.url);
       await interaction.editReply(result);
       return;
     }

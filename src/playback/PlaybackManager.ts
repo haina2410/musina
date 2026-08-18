@@ -46,10 +46,11 @@ export class PlaybackManager {
     member: GuildMember,
     textChannel: SendableChannels,
     urls: readonly string[],
+    initialSkipped = 0,
   ): Promise<string> {
     const voiceChannel = this.requirePlaybackChannel(member);
     let added = 0;
-    let skipped = 0;
+    let skipped = initialSkipped;
     let firstResult = '';
 
     for (const [index, url] of urls.entries()) {
