@@ -36,15 +36,59 @@ export class PlaybackManager {
   ) {}
 
   async enqueue(member: GuildMember, textChannel: SendableChannels, url: string): Promise<string> {
-    const voiceChannel = member.voice.channel;
-    if (!voiceChannel) throw new Error('Join a voice channel first.');
-    const existing = this.sessions.get(member.guild.id);
-    if (existing && existing.channelId !== voiceChannel.id) {
-      throw new Error('Join the voice channel I am already using first.');
-    }
-    if (existing && existing.queue.length >= this.maxQueueSize) throw new Error('The queue is full.');
-
+    const voiceChannel = this.requirePlaybackChannel(member);
+    this.requireQueueCapacity(member.guild.id);
     const track = await this.resolver.inspect(url, member.id);
+    return this.addTrack(member, voiceChannel, textChannel, track);
+  }
+
+  async enqueueMany(
+    member: GuildMember,
+    textChannel: SendableChannels,
+    urls: readonly string[],
+  ): Promise<string> {
+    const voiceChannel = this.requirePlaybackChannel(member);
+    let added = 0;
+    let skipped = 0;
+    let firstResult = '';
+
+    for (const [index, url] of urls.entries()) {
+      if (!this.hasQueueCapacity(member.guild.id)) {
+        skipped += urls.length - index;
+        break;
+      }
+
+      let track: Track;
+      try {
+        track = await this.resolver.inspect(url, member.id);
+      } catch (error) {
+        this.logger.warn({ error, guildId: member.guild.id, url }, 'skipping list track');
+        skipped += 1;
+        continue;
+      }
+
+      if (!this.hasQueueCapacity(member.guild.id)) {
+        skipped += urls.length - index;
+        break;
+      }
+      const result = this.addTrack(member, voiceChannel, textChannel, track);
+      if (!firstResult) firstResult = result;
+      added += 1;
+    }
+
+    if (added === 0) throw new Error('No tracks from that list could be queued.');
+    const noun = added === 1 ? 'track' : 'tracks';
+    return `Imported ${added} ${noun} (${skipped} skipped). ${firstResult}`;
+  }
+
+  private addTrack(
+    member: GuildMember,
+    voiceChannel: VoiceBasedChannel,
+    textChannel: SendableChannels,
+    track: Track,
+  ): string {
+    this.requireQueueCapacity(member.guild.id);
+    const existing = this.sessions.get(member.guild.id);
     const session = existing ?? this.createSession(voiceChannel, textChannel);
     session.textChannel = textChannel;
     if (!existing) this.sessions.set(member.guild.id, session);
@@ -55,6 +99,25 @@ export class PlaybackManager {
     session.current = track;
     this.play(session);
     return `Now playing **${this.safeTitle(track.title)}**.`;
+  }
+
+  private hasQueueCapacity(guildId: string): boolean {
+    const session = this.sessions.get(guildId);
+    return !session || session.queue.length < this.maxQueueSize;
+  }
+
+  private requirePlaybackChannel(member: GuildMember): VoiceBasedChannel {
+    const voiceChannel = member.voice.channel;
+    if (!voiceChannel) throw new Error('Join a voice channel first.');
+    const existing = this.sessions.get(member.guild.id);
+    if (existing && existing.channelId !== voiceChannel.id) {
+      throw new Error('Join the voice channel I am already using first.');
+    }
+    return voiceChannel;
+  }
+
+  private requireQueueCapacity(guildId: string): void {
+    if (!this.hasQueueCapacity(guildId)) throw new Error('The queue is full.');
   }
 
   skip(member: GuildMember): string {
