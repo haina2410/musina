@@ -12,6 +12,7 @@ import {
 import type { GuildMember, SendableChannels, VoiceBasedChannel } from 'discord.js';
 import type { Logger } from 'pino';
 import type { ResolvedAudio, Track } from './types.js';
+import type { VoiceChannelStatus } from './VoiceChannelStatus.js';
 import type { YtDlpResolver } from './YtDlpResolver.js';
 
 interface Session {
@@ -22,6 +23,7 @@ interface Session {
   idleTimer: NodeJS.Timeout | null;
   player: AudioPlayer;
   queue: Track[];
+  statusActive: boolean;
   textChannel: SendableChannels;
 }
 
@@ -33,6 +35,7 @@ export class PlaybackManager {
     private readonly idleDisconnectMs: number,
     private readonly maxQueueSize: number,
     private readonly logger: Logger,
+    private readonly voiceStatus: VoiceChannelStatus,
   ) {}
 
   async enqueue(member: GuildMember, textChannel: SendableChannels, url: string): Promise<string> {
@@ -163,7 +166,7 @@ export class PlaybackManager {
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Pause } });
     const session: Session = {
       activeAudio: null, channelId: channel.id, connection, current: null,
-      idleTimer: null, player, queue: [], textChannel,
+      idleTimer: null, player, queue: [], statusActive: false, textChannel,
     };
     connection.subscribe(player);
     player.on(AudioPlayerStatus.Idle, () => this.advance(channel.guild.id, session));
@@ -186,6 +189,8 @@ export class PlaybackManager {
     session.activeAudio?.cleanup();
     session.activeAudio = this.resolver.createAudio(session.current);
     session.player.play(createAudioResource(session.activeAudio.stream));
+    session.statusActive = true;
+    void this.voiceStatus.set(session.channelId, session.current.title);
   }
 
   private advance(guildId: string, session: Session): void {
@@ -200,16 +205,24 @@ export class PlaybackManager {
       });
       return;
     }
+    this.clearStatus(session);
     session.idleTimer = setTimeout(() => this.destroy(guildId, session), this.idleDisconnectMs);
   }
 
   private destroy(guildId: string, session: Session): void {
     if (this.sessions.get(guildId) !== session) return;
     if (session.idleTimer) clearTimeout(session.idleTimer);
+    this.clearStatus(session);
     session.activeAudio?.cleanup();
     session.player.stop();
     session.connection.destroy();
     this.sessions.delete(guildId);
+  }
+
+  private clearStatus(session: Session): void {
+    if (!session.statusActive) return;
+    session.statusActive = false;
+    void this.voiceStatus.clear(session.channelId);
   }
 
   private requireSameChannel(member: GuildMember): Session {

@@ -11,9 +11,8 @@ import type { PlaybackManager } from '../playback/PlaybackManager.js';
 import { PlayInput } from '../playback/PlayInput.js';
 import { findSupportedUrl } from '../playback/urlPolicy.js';
 
-export function createBot(playback: PlaybackManager, logger: Logger): Client {
-  const playInput = new PlayInput();
-  const client = new Client({
+export function createDiscordClient(): Client {
+  return new Client({
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
@@ -22,7 +21,14 @@ export function createBot(playback: PlaybackManager, logger: Logger): Client {
     ],
     allowedMentions: { parse: [] },
   });
+}
 
+export function createBot(
+  playback: PlaybackManager,
+  logger: Logger,
+  client = createDiscordClient(),
+): Client {
+  const playInput = new PlayInput();
   client.on(Events.ClientReady, (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
   client.on('interactionCreate', (interaction) => {
     if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
