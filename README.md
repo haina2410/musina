@@ -29,7 +29,8 @@ following Discord's and each media provider's terms.
 2. Enable **Message Content Intent** on the Bot page. It is required for the
    mention-with-link feature.
 3. Invite the bot with the `bot` and `applications.commands` scopes. Grant it
-   View Channels, Send Messages, Connect, and Speak permissions.
+   View Channels, Send Messages, Connect, Speak, and Set Voice Channel Status
+   permissions.
 4. Copy `.env.example` to `.env`, then fill in the token and application ID.
    Set `DISCORD_GUILD_ID` during development for immediate command updates.
 
