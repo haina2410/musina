@@ -160,7 +160,7 @@ git commit -m "feat: add voice channel status service"
 
 - [ ] **Step 1: Add a status double to the playback fixture**
 
-Add this fixture dependency and pass it immediately before `logger` in the `PlaybackManager` constructor:
+Add this fixture dependency and pass it immediately after `logger` in the `PlaybackManager` constructor:
 
 ```ts
 const voiceStatus = {
@@ -172,8 +172,8 @@ const manager = new PlaybackManager(
   resolver as never,
   300_000,
   maxQueueSize,
-  voiceStatus as never,
   logger as never,
+  voiceStatus as never,
 );
 ```
 
@@ -244,15 +244,15 @@ Expected: FAIL because `PlaybackManager` does not invoke the status dependency.
 - [ ] **Step 4: Implement lifecycle tracking**
 
 Import `VoiceChannelStatus`, add `statusActive: boolean` to `Session`, initialize it to
-`false`, and add the service before `logger` in the constructor:
+`false`, and add the service after `logger` in the constructor:
 
 ```ts
 constructor(
   private readonly resolver: YtDlpResolver,
   private readonly idleDisconnectMs: number,
   private readonly maxQueueSize: number,
-  private readonly voiceStatus: VoiceChannelStatus,
   private readonly logger: Logger,
+  private readonly voiceStatus: VoiceChannelStatus,
 ) {}
 ```
 
@@ -364,8 +364,8 @@ const playback = new PlaybackManager(
   resolver,
   config.idleDisconnectMs,
   config.maxQueueSize,
-  voiceStatus,
   logger,
+  voiceStatus,
 );
 createBot(playback, logger, client);
 ```

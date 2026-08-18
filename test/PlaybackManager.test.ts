@@ -58,17 +58,23 @@ function fixture(maxQueueSize = 50) {
     voice: { channel: voiceChannel, channelId: 'voice-1' },
   };
   const textChannel = { send: vi.fn() };
+  const voiceStatus = {
+    clear: vi.fn().mockResolvedValue(undefined),
+    set: vi.fn().mockResolvedValue(undefined),
+  };
   const manager = new PlaybackManager(
     resolver as never,
     300_000,
     maxQueueSize,
     logger as never,
+    voiceStatus as never,
   );
   return {
     inspect,
     manager,
     member: member as never,
     textChannel: textChannel as never,
+    voiceStatus,
   };
 }
 
@@ -116,5 +122,57 @@ describe('PlaybackManager.enqueueMany', () => {
       .rejects.toThrow('No tracks from that list could be queued');
     expect(manager.queue('guild-1')).toBe('Nothing is playing.');
     expect(voice.joinVoiceChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlaybackManager voice channel status', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('sets the current title when a track starts', async () => {
+    const { inspect, manager, member, textChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+
+    await manager.enqueue(member, textChannel, 'one');
+
+    expect(voiceStatus.set).toHaveBeenCalledWith('voice-1', 'One');
+  });
+
+  it('replaces the status on advance and clears it when the queue ends', async () => {
+    const { inspect, manager, member, textChannel, voiceStatus } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+
+    idle();
+    expect(voiceStatus.set).toHaveBeenLastCalledWith('voice-1', 'Two');
+
+    idle();
+    expect(voiceStatus.clear).toHaveBeenCalledTimes(1);
+    expect(voiceStatus.clear).toHaveBeenCalledWith('voice-1');
+  });
+
+  it('clears an active status when stopped', async () => {
+    const { inspect, manager, member, textChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+
+    manager.stop(member);
+
+    expect(voiceStatus.clear).toHaveBeenCalledTimes(1);
+    expect(voiceStatus.clear).toHaveBeenCalledWith('voice-1');
+  });
+
+  it('clears each active session during shutdown', async () => {
+    const { inspect, manager, member, textChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+
+    manager.shutdown();
+
+    expect(voiceStatus.clear).toHaveBeenCalledTimes(1);
+    expect(voiceStatus.clear).toHaveBeenCalledWith('voice-1');
   });
 });
