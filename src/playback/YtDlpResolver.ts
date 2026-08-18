@@ -20,6 +20,7 @@ export class YtDlpResolver {
   async inspect(urlInput: string, requestedBy: string): Promise<Track> {
     const { source, url } = validateMediaUrl(urlInput);
     const metadata = await this.runJson([
+      '--js-runtimes', 'node',
       '--dump-single-json', '--no-playlist', '--no-warnings', '--socket-timeout', '15', url,
     ]);
     const duration = typeof metadata.duration === 'number' ? metadata.duration : null;
@@ -37,6 +38,7 @@ export class YtDlpResolver {
 
   createAudio(track: Track): ResolvedAudio {
     const child = spawn(this.binary, [
+      '--js-runtimes', 'node',
       '--no-playlist', '--no-warnings', '--format', 'bestaudio/best', '--output', '-', track.canonicalUrl,
     ], { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';

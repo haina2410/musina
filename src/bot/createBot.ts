@@ -1,5 +1,6 @@
 import {
   Client,
+  Events,
   GatewayIntentBits,
   type ChatInputCommandInteraction,
   type GuildMember,
@@ -22,7 +23,7 @@ export function createBot(playback: PlaybackManager, logger: Logger): Client {
     allowedMentions: { parse: [] },
   });
 
-  client.on('ready', (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
+  client.on(Events.ClientReady, (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
   client.on('interactionCreate', (interaction) => {
     if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
   });
