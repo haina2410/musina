@@ -1,0 +1,19 @@
+name: ${COMPOSE_PROJECT_NAME:-musina}
+
+services:
+  app:
+    image: ghcr.io/haina2410/musina/app:${RELEASE_TAG:-latest}
+    pull_policy: missing
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?required}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?required}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MAX_TRACK_SECONDS: ${MAX_TRACK_SECONDS:-14400}
+      IDLE_DISCONNECT_MS: ${IDLE_DISCONNECT_MS:-300000}
+      MAX_QUEUE_SIZE: ${MAX_QUEUE_SIZE:-50}
+      YTDLP_PATH: ${YTDLP_PATH:-yt-dlp}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true

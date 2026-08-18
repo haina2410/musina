@@ -1,6 +1,10 @@
 .git
-.env
+.github
+.env*
 node_modules
 dist
 coverage
+docs/superpowers
+test
+.worktrees
 *.log

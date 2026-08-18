@@ -66,3 +66,29 @@ docker run --rm --env-file .env musina
 
 The image includes FFmpeg and `yt-dlp`, runs as a non-root user, and uses `tini`
 to reap media subprocesses.
+
+## Live deployment
+
+Musina has one remote environment. It uses the `KOMODO_STAGING_*` GitHub setting
+names inherited from `shoe-web`, but this stack is the live deployment rather
+than a pre-production promotion stage.
+
+Configure Komodo to load `docker-compose.yml` from `main` and provide the
+runtime variables from `.env.example`. `DISCORD_TOKEN` and
+`DISCORD_CLIENT_ID` are required; the remaining variables keep the defaults
+shown in that example. The stack pulls
+`ghcr.io/haina2410/musina/app:${RELEASE_TAG:-latest}`. Leave `RELEASE_TAG`
+unset to follow the newest successful `main` build, or set it to a published
+full commit SHA to pin or roll back the bot.
+
+Configure these GitHub repository settings:
+
+- variable `KOMODO_STAGING_URL`
+- variable `KOMODO_STAGING_STACK_NAME`
+- secret `KOMODO_STAGING_API_KEY`
+- secret `KOMODO_STAGING_API_SECRET`
+
+Every push to `main` builds the Docker target `app` for `linux/amd64`, publishes
+full-SHA and `latest` tags to GHCR, and redeploys the Komodo stack after the
+image push succeeds. Manual workflow runs publish an image without deploying
+the live stack.

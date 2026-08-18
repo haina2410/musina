@@ -7,7 +7,7 @@ COPY src ./src
 COPY scripts ./scripts
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim AS app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg python3 python3-pip tini \
     && pip3 install --break-system-packages --no-cache-dir --pre "yt-dlp[default]" \
