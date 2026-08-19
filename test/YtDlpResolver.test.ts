@@ -25,6 +25,75 @@ function fakeChild() {
 describe('YtDlpResolver', () => {
   beforeEach(() => childProcess.spawn.mockReset());
 
+  it('returns normalized flat YouTube search entries', async () => {
+    const child = fakeChild();
+    childProcess.spawn.mockReturnValue(child);
+    queueMicrotask(() => {
+      child.stdout.end(JSON.stringify({
+        entries: [
+          { duration: 185, title: ' First ', url: 'https://www.youtube.com/watch?v=abcdefghijk' },
+          { duration: null, title: 'Second', webpage_url: 'https://youtu.be/lmnopqrst' },
+          { title: 'A channel', url: 'https://www.youtube.com/@musician' },
+          { title: 'Not media', url: 'https://example.com/nope' },
+        ],
+      }));
+      child.emit('close', 0);
+    });
+    const resolver = new YtDlpResolver('yt-dlp', 300, { warn: vi.fn() } as never);
+
+    await expect(resolver.search('  synthwave mix  ', 5)).resolves.toEqual([
+      { durationSeconds: 185, title: 'First', url: 'https://www.youtube.com/watch?v=abcdefghijk' },
+      { durationSeconds: null, title: 'Second', url: 'https://youtu.be/lmnopqrst' },
+    ]);
+    expect(childProcess.spawn).toHaveBeenCalledWith('yt-dlp', [
+      '--js-runtimes', 'node',
+      '--dump-single-json', '--flat-playlist', '--no-warnings', '--socket-timeout', '15',
+      'ytsearch5:synthwave mix',
+    ], { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+  });
+
+  it.each(['', '   ', 'x'.repeat(201)])('rejects invalid search query length', async (query) => {
+    const resolver = new YtDlpResolver('yt-dlp', 300, { warn: vi.fn() } as never);
+
+    await expect(resolver.search(query, 5)).rejects
+      .toThrow('Search terms must be 1 to 200 characters.');
+    expect(childProcess.spawn).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 6, 1.5])('rejects invalid result limit %s', async (limit) => {
+    const resolver = new YtDlpResolver('yt-dlp', 300, { warn: vi.fn() } as never);
+
+    await expect(resolver.search('song', limit)).rejects
+      .toThrow('Search result limit must be between 1 and 5.');
+    expect(childProcess.spawn).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty usable result set', async () => {
+    const child = fakeChild();
+    childProcess.spawn.mockReturnValue(child);
+    queueMicrotask(() => {
+      child.stdout.end(JSON.stringify({ entries: [] }));
+      child.emit('close', 0);
+    });
+    const resolver = new YtDlpResolver('yt-dlp', 300, { warn: vi.fn() } as never);
+
+    await expect(resolver.search('missing song', 5)).rejects.toThrow('No YouTube results found.');
+  });
+
+  it('discards a result URL that cannot fit a Discord option value', async () => {
+    const child = fakeChild();
+    childProcess.spawn.mockReturnValue(child);
+    queueMicrotask(() => {
+      child.stdout.end(JSON.stringify({ entries: [
+        { title: 'Too long', url: `https://youtube.com/watch?v=${'x'.repeat(100)}` },
+      ] }));
+      child.emit('close', 0);
+    });
+    const resolver = new YtDlpResolver('yt-dlp', 300, { warn: vi.fn() } as never);
+
+    await expect(resolver.search('song', 5)).rejects.toThrow('No YouTube results found.');
+  });
+
   it('enables the Node runtime when inspecting YouTube metadata', async () => {
     const child = fakeChild();
     childProcess.spawn.mockReturnValue(child);

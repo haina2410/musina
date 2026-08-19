@@ -1,13 +1,18 @@
 import { spawn } from 'node:child_process';
 import type { Logger } from 'pino';
-import type { ResolvedAudio, Track } from './types.js';
+import type { ResolvedAudio, SearchCandidate, Track } from './types.js';
 import { validateMediaUrl } from './urlPolicy.js';
 
 interface Metadata {
   duration?: number | null;
   original_url?: string;
   title?: string;
+  url?: string;
   webpage_url?: string;
+}
+
+interface SearchMetadata {
+  entries?: unknown;
 }
 
 export class YtDlpResolver {
@@ -36,6 +41,48 @@ export class YtDlpResolver {
     };
   }
 
+  async search(queryInput: string, limit: number): Promise<SearchCandidate[]> {
+    const query = queryInput.trim();
+    if (!query || query.length > 200) {
+      throw new Error('Search terms must be 1 to 200 characters.');
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5) {
+      throw new Error('Search result limit must be between 1 and 5.');
+    }
+    const result = await this.runJson<SearchMetadata>([
+      '--js-runtimes', 'node',
+      '--dump-single-json', '--flat-playlist', '--no-warnings', '--socket-timeout', '15',
+      `ytsearch${limit}:${query}`,
+    ]);
+    const entries = Array.isArray(result.entries) ? result.entries : [];
+    const candidates = entries.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const metadata = entry as Metadata;
+      const rawUrl = metadata.webpage_url || metadata.url;
+      if (typeof rawUrl !== 'string') return [];
+      try {
+        const media = validateMediaUrl(rawUrl);
+        if (media.source !== 'youtube' || media.url.length > 100 || !isYoutubeVideoUrl(media.url)) {
+          return [];
+        }
+        const duration = typeof metadata.duration === 'number'
+          && Number.isFinite(metadata.duration)
+          && metadata.duration >= 0
+          ? metadata.duration
+          : null;
+        return [{
+          durationSeconds: duration,
+          title: metadata.title?.trim() || 'Untitled track',
+          url: media.url,
+        }];
+      } catch {
+        return [];
+      }
+    }).slice(0, limit);
+    if (candidates.length === 0) throw new Error('No YouTube results found.');
+    return candidates;
+  }
+
   createAudio(track: Track): ResolvedAudio {
     const child = spawn(this.binary, [
       '--js-runtimes', 'node',
@@ -52,7 +99,7 @@ export class YtDlpResolver {
     return { cleanup: () => child.kill('SIGKILL'), stream: child.stdout, track };
   }
 
-  private runJson(args: string[]): Promise<Metadata> {
+  private runJson<T = Metadata>(args: string[]): Promise<T> {
     return new Promise((resolve, reject) => {
       const child = spawn(this.binary, args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
       let stdout = '';
@@ -72,9 +119,18 @@ export class YtDlpResolver {
       child.on('close', (code) => {
         clearTimeout(timer);
         if (code !== 0) return reject(new Error(stderr.trim() || 'Unable to read that media.'));
-        try { resolve(JSON.parse(stdout) as Metadata); }
+        try { resolve(JSON.parse(stdout) as T); }
         catch { reject(new Error('The media provider returned an invalid response.')); }
       });
     });
   }
+}
+
+function isYoutubeVideoUrl(input: string): boolean {
+  const url = new URL(input);
+  if (url.hostname.toLowerCase() === 'youtu.be') {
+    return url.pathname.split('/').filter(Boolean).length === 1;
+  }
+  if (url.pathname === '/watch') return Boolean(url.searchParams.get('v')?.trim());
+  return /^\/(?:embed|live|shorts)\/[^/]+\/?$/.test(url.pathname);
 }

@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Track } from '../src/playback/types.js';
+import type { SearchCandidate, Track } from '../src/playback/types.js';
 
 const voice = vi.hoisted(() => ({
   createAudioResource: vi.fn((stream: Readable) => stream),
@@ -41,6 +41,7 @@ function track(url: string, title: string): Track {
 
 function fixture(maxQueueSize = 50) {
   const inspect = vi.fn<(url: string, requestedBy: string) => Promise<Track>>();
+  const search = vi.fn<(query: string, limit: number) => Promise<SearchCandidate[]>>();
   const resolver = {
     createAudio: vi.fn((value: Track) => ({
       cleanup: vi.fn(),
@@ -48,6 +49,7 @@ function fixture(maxQueueSize = 50) {
       track: value,
     })),
     inspect,
+    search,
   };
   const logger = { error: vi.fn(), warn: vi.fn() };
   const guild = { id: 'guild-1', voiceAdapterCreator: {} };
@@ -73,10 +75,52 @@ function fixture(maxQueueSize = 50) {
     inspect,
     manager,
     member: member as never,
+    search,
     textChannel: textChannel as never,
     voiceStatus,
   };
 }
+
+describe('PlaybackManager search', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('validates playback before searching and queues the inspected best match', async () => {
+    const { inspect, manager, member, search, textChannel } = fixture();
+    search.mockResolvedValue([{
+      durationSeconds: 180,
+      title: 'Candidate',
+      url: 'https://youtu.be/abcdefghijk',
+    }]);
+    inspect.mockResolvedValue(track('https://youtu.be/abcdefghijk', 'Candidate'));
+
+    await expect(manager.enqueueQuery(member, textChannel, 'candidate song'))
+      .resolves.toBe('Now playing **Candidate**.');
+    expect(search).toHaveBeenCalledWith('candidate song', 1);
+    expect(inspect).toHaveBeenCalledWith('https://youtu.be/abcdefghijk', 'user-1');
+  });
+
+  it('does not search when the requester is outside a voice channel', async () => {
+    const { manager, member, search, textChannel } = fixture();
+    const outsider = { ...member, voice: { channel: null, channelId: null } };
+
+    await expect(manager.enqueueQuery(outsider, textChannel, 'candidate song'))
+      .rejects.toThrow('Join a voice channel first.');
+    expect(search).not.toHaveBeenCalled();
+  });
+
+  it('discovers five results without requiring voice membership', async () => {
+    const { manager, search } = fixture();
+    const candidates = [{
+      durationSeconds: 180,
+      title: 'Candidate',
+      url: 'https://youtu.be/abcdefghijk',
+    }];
+    search.mockResolvedValue(candidates);
+
+    await expect(manager.search('candidate song')).resolves.toBe(candidates);
+    expect(search).toHaveBeenCalledWith('candidate song', 5);
+  });
+});
 
 describe('PlaybackManager.enqueueMany', () => {
   beforeEach(() => vi.clearAllMocks());

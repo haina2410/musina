@@ -1,10 +1,12 @@
 # Musina
 
-Musina is a small Discord voice bot. Use `/play <url>` with a YouTube video,
-YouTube playlist, or SoundCloud link, or mention the bot with one of those
-links; it joins your current voice channel and starts playing. Later requests
-are queued per server. Every slash command can also use the bot as a message
-prefix, such as `@Musina help`, `@Musina shuffle`, or `@Musina play <url>`.
+Musina is a small Discord voice bot. Use `/play <input>` with YouTube search
+terms, a YouTube video or playlist URL, or a SoundCloud URL; it joins your
+current voice channel and starts playing the best match. Later requests are
+queued per server. Use `/search <query>` to choose from the top five YouTube
+results in a requester-only dropdown. Every slash command can also use the bot
+as a message prefix, such as `@Musina play <input>` or `@Musina search <query>`.
+The existing `@Musina <url>` playback shorthand remains available.
 
 YouTube playlist imports accept both standalone playlist URLs and video URLs
 that contain a `list` query parameter. Tracks are considered in the order
@@ -57,12 +59,14 @@ npm run register
 npm run dev
 ```
 
-The available commands are `/play`, `/skip`, `/stop`, `/queue`, `/nowplaying`,
-`/shuffle`, and `/help`. Shuffle keeps the current track playing and randomizes
-the upcoming queue. Skip, stop, and shuffle may only be used from the bot's
-active voice channel. Tracks default to a four-hour maximum, queues default to
-50 upcoming tracks, and an empty session disconnects after five minutes. These
-limits can be changed with the variables in `.env.example`.
+The available commands are `/play`, `/search`, `/skip`, `/stop`, `/queue`,
+`/nowplaying`, `/shuffle`, and `/help`. Search menus expire after five minutes;
+only the requester can choose a result, and voice-channel validation happens
+when they make that choice. Shuffle keeps the current track playing and
+randomizes the upcoming queue. Skip, stop, and shuffle may only be used from the
+bot's active voice channel. Tracks default to a four-hour maximum, queues
+default to 50 upcoming tracks, and an empty session disconnects after five
+minutes. These limits can be changed with the variables in `.env.example`.
 
 ## Validate and build
 
