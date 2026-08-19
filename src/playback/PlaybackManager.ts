@@ -9,7 +9,7 @@ import {
   type AudioPlayer,
   type VoiceConnection,
 } from '@discordjs/voice';
-import type { GuildMember, SendableChannels, VoiceBasedChannel } from 'discord.js';
+import type { GuildMember, SendableChannels, VoiceBasedChannel, VoiceState } from 'discord.js';
 import type { Logger } from 'pino';
 import type { ResolvedAudio, Track } from './types.js';
 import type { VoiceChannelStatus } from './VoiceChannelStatus.js';
@@ -20,7 +20,10 @@ interface Session {
   channelId: string;
   connection: VoiceConnection;
   current: Track | null;
+  emptyPaused: boolean;
+  emptyTimer: NodeJS.Timeout | null;
   idleTimer: NodeJS.Timeout | null;
+  manualPaused: boolean;
   player: AudioPlayer;
   queue: Track[];
   statusActive: boolean;
@@ -131,6 +134,33 @@ export class PlaybackManager {
     return 'Skipped.';
   }
 
+  pause(member: GuildMember): string {
+    const session = this.requireSameChannel(member);
+    if (!session.current) throw new Error('Nothing is playing.');
+    if (session.manualPaused || session.emptyPaused) {
+      throw new Error('Playback is already paused.');
+    }
+    session.player.pause();
+    session.manualPaused = true;
+    void this.voiceStatus.setPaused(session.channelId, false);
+    return 'Paused.';
+  }
+
+  resume(member: GuildMember): string {
+    const session = this.requireSameChannel(member);
+    if (!session.current) throw new Error('Nothing is playing.');
+    if (!session.manualPaused && !session.emptyPaused) {
+      throw new Error('Playback is not paused.');
+    }
+    if (session.emptyTimer) clearTimeout(session.emptyTimer);
+    session.emptyTimer = null;
+    session.emptyPaused = false;
+    session.manualPaused = false;
+    session.player.unpause();
+    void this.voiceStatus.set(session.channelId, session.current.title);
+    return 'Resumed.';
+  }
+
   stop(member: GuildMember): string {
     const session = this.requireSameChannel(member);
     session.queue.length = 0;
@@ -162,6 +192,16 @@ export class PlaybackManager {
     return track ? `Now playing **${this.safeTitle(track.title)}**.` : 'Nothing is playing.';
   }
 
+  handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): void {
+    const session = this.sessions.get(newState.guild.id);
+    if (!session || (oldState.channelId !== session.channelId && newState.channelId !== session.channelId)) return;
+    const channel = newState.guild.channels.cache.get(session.channelId);
+    if (!channel?.isVoiceBased() || !session.current) return;
+    const hasListener = channel.members.some((member) => !member.user.bot);
+    if (hasListener) this.handleListenerReturn(session);
+    else this.handleEmptyChannel(newState.guild.id, session);
+  }
+
   shutdown(): void {
     for (const [guildId, session] of this.sessions) this.destroy(guildId, session);
   }
@@ -176,7 +216,8 @@ export class PlaybackManager {
     const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Pause } });
     const session: Session = {
       activeAudio: null, channelId: channel.id, connection, current: null,
-      idleTimer: null, player, queue: [], statusActive: false, textChannel,
+      emptyPaused: false, emptyTimer: null, idleTimer: null, manualPaused: false,
+      player, queue: [], statusActive: false, textChannel,
     };
     connection.subscribe(player);
     player.on(AudioPlayerStatus.Idle, () => this.advance(channel.guild.id, session));
@@ -222,11 +263,33 @@ export class PlaybackManager {
   private destroy(guildId: string, session: Session): void {
     if (this.sessions.get(guildId) !== session) return;
     if (session.idleTimer) clearTimeout(session.idleTimer);
+    if (session.emptyTimer) clearTimeout(session.emptyTimer);
     this.clearStatus(session);
     session.activeAudio?.cleanup();
     session.player.stop();
     session.connection.destroy();
     this.sessions.delete(guildId);
+  }
+
+  private handleEmptyChannel(guildId: string, session: Session): void {
+    if (session.emptyPaused) return;
+    session.emptyPaused = true;
+    if (!session.manualPaused) session.player.pause();
+    void this.voiceStatus.setPaused(session.channelId, true);
+    session.emptyTimer = setTimeout(() => this.destroy(guildId, session), this.idleDisconnectMs);
+  }
+
+  private handleListenerReturn(session: Session): void {
+    if (!session.emptyPaused) return;
+    if (session.emptyTimer) clearTimeout(session.emptyTimer);
+    session.emptyTimer = null;
+    session.emptyPaused = false;
+    if (session.manualPaused) {
+      void this.voiceStatus.setPaused(session.channelId, false);
+      return;
+    }
+    session.player.unpause();
+    void this.voiceStatus.set(session.channelId, session.current!.title);
   }
 
   private clearStatus(session: Session): void {

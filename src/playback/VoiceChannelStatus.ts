@@ -12,6 +12,14 @@ export class VoiceChannelStatus {
     return this.update(channelId, status, 'set');
   }
 
+  setPaused(channelId: string, waitingForListener: boolean): Promise<void> {
+    return this.update(
+      channelId,
+      waitingForListener ? 'paused - waiting for someone...' : 'paused',
+      'set',
+    );
+  }
+
   clear(channelId: string): Promise<void> {
     return this.update(channelId, null, 'clear');
   }
