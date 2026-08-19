@@ -16,6 +16,30 @@ describe('PlayInput', () => {
     expect(youtubePlaylist.load).not.toHaveBeenCalled();
   });
 
+  it('classifies trimmed free text as a YouTube query', async () => {
+    const input = new PlayInput(new UwufufuImporter(), { load: vi.fn() });
+
+    await expect(input.resolve('  never gonna give you up  ')).resolves.toEqual({
+      kind: 'query',
+      query: 'never gonna give you up',
+    });
+  });
+
+  it.each(['', '   '])('rejects blank input %j', async (value) => {
+    const input = new PlayInput(new UwufufuImporter(), { load: vi.fn() });
+
+    await expect(input.resolve(value)).rejects.toThrow('Provide a URL or search terms.');
+  });
+
+  it.each(['https://example.com/song', 'ftp://youtube.com/song', 'spotify:track:123'])(
+    'does not reinterpret URI-shaped input %s as search text',
+    async (value) => {
+      const input = new PlayInput(new UwufufuImporter(), { load: vi.fn() });
+
+      await expect(input.resolve(value)).rejects.toThrow();
+    },
+  );
+
   it.each([
     'https://www.youtube.com/watch?v=oMGPJ4uE_W8&list=RDoMGPJ4uE_W8&start_radio=1',
     'https://www.youtube.com/playlist?list=PL123',
