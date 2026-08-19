@@ -3,6 +3,8 @@ import { SlashCommandBuilder } from 'discord.js';
 export const HELP_TEXT = [
   '**Musina commands**',
   '`/play <url>` — play or queue YouTube, YouTube playlists, SoundCloud, or UwUFUFU selections',
+  '`/pause` — pause playback',
+  '`/resume` — resume playback',
   '`/skip` — skip the current track',
   '`/stop` — stop playback and leave voice',
   '`/queue` — show the current and upcoming tracks',
@@ -11,7 +13,7 @@ export const HELP_TEXT = [
   '`/help` — show this guide',
   '',
   'You can also use a leading bot mention, such as `@Musina help` or `@Musina play <url>`.',
-  'Join my active voice channel to use skip, stop, or shuffle.',
+  'Join my active voice channel to use pause, resume, skip, stop, or shuffle.',
 ].join('\n');
 
 export const commandDefinitions = [
@@ -24,6 +26,8 @@ export const commandDefinitions = [
         .setDescription('YouTube, YouTube playlist, SoundCloud, or UwUFUFU URL')
         .setRequired(true),
     ),
+  new SlashCommandBuilder().setName('pause').setDescription('Pause playback'),
+  new SlashCommandBuilder().setName('resume').setDescription('Resume playback'),
   new SlashCommandBuilder().setName('skip').setDescription('Skip the current track'),
   new SlashCommandBuilder().setName('stop').setDescription('Stop playback and leave voice'),
   new SlashCommandBuilder().setName('queue').setDescription('Show the playback queue'),

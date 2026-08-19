@@ -36,6 +36,9 @@ export function createBot(
     if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
   });
   client.on('messageCreate', (message) => void handleMessage(message, playback, playInput, logger));
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    playback.handleVoiceStateUpdate(oldState, newState);
+  });
   return client;
 }
 
@@ -87,7 +90,7 @@ async function handleMessage(
     await message.reply({ content: HELP_TEXT, allowedMentions: { repliedUser: false } });
     return;
   }
-  if (command && ['skip', 'stop', 'queue', 'nowplaying', 'shuffle'].includes(command.name)) {
+  if (command && ['pause', 'resume', 'skip', 'stop', 'queue', 'nowplaying', 'shuffle'].includes(command.name)) {
     try {
       const result = runPlaybackCommand(command.name, playback, message.member!, message.guildId);
       await message.reply({ content: result, allowedMentions: { repliedUser: false } });
@@ -131,6 +134,8 @@ function runPlaybackCommand(
   guildId: string,
 ): string {
   switch (commandName) {
+    case 'pause': return playback.pause(member);
+    case 'resume': return playback.resume(member);
     case 'skip': return playback.skip(member);
     case 'stop': return playback.stop(member);
     case 'queue': return playback.queue(guildId);
