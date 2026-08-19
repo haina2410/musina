@@ -81,10 +81,10 @@ Playback manager tests will make randomness deterministic and verify that:
 
 Command tests will verify that both definitions are registered and that `/help`
 is represented in the shared help content. Parser tests will cover both Discord
-mention forms, case-insensitive commands, arguments, non-leading mentions, and
-the URL shorthand. Handler tests will verify that mention commands dispatch to
-the same playback operations as slash commands. The full test, lint, typecheck,
-and build commands must pass.
+mention forms, case-insensitive commands, arguments, and non-leading mentions.
+Handler tests will verify that mention commands dispatch to the same playback
+operations as slash commands and that the existing URL shorthand remains
+available. The full test, lint, typecheck, and build commands must pass.
 
 ## Out of Scope
 
