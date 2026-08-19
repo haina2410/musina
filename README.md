@@ -1,10 +1,23 @@
 # Musina
 
-Musina is a small Discord voice bot. Use `/play <url>` with a YouTube or
-SoundCloud link, or mention the bot with one of those links; it joins your current
-voice channel and starts playing. Later requests are queued per server. Every
-slash command can also use the bot as a message prefix, such as `@Musina help`,
-`@Musina shuffle`, or `@Musina play <url>`.
+Musina is a small Discord voice bot. Use `/play <url>` with a YouTube video,
+YouTube playlist, or SoundCloud link, or mention the bot with one of those
+links; it joins your current voice channel and starts playing. Later requests
+are queued per server. Every slash command can also use the bot as a message
+prefix, such as `@Musina help`, `@Musina shuffle`, or `@Musina play <url>`.
+
+YouTube playlist imports accept both standalone playlist URLs and video URLs
+that contain a `list` query parameter. Tracks are considered in the order
+returned by YouTube, including Mix/radio links such as:
+
+```text
+https://www.youtube.com/watch?v=oMGPJ4uE_W8&list=RDoMGPJ4uE_W8&start_radio=1
+```
+
+Playlist metadata is limited to the first `MAX_QUEUE_SIZE + 1` entries, enough
+to fill the current-track slot and the upcoming queue when playback is empty.
+Unavailable entries are skipped and the existing per-server queue limit still
+applies.
 
 `/play` also accepts an UwUFUFU selections API URL and imports the usable YouTube
 videos from that response page in order. It does not fetch additional pages.
@@ -47,10 +60,9 @@ npm run dev
 The available commands are `/play`, `/skip`, `/stop`, `/queue`, `/nowplaying`,
 `/shuffle`, and `/help`. Shuffle keeps the current track playing and randomizes
 the upcoming queue. Skip, stop, and shuffle may only be used from the bot's
-active voice channel. Playlists are intentionally rejected, tracks default to a
-four-hour maximum, queues default to 50 tracks, and an empty session disconnects
-after five minutes. These limits can be changed with the variables in
-`.env.example`.
+active voice channel. Tracks default to a four-hour maximum, queues default to
+50 upcoming tracks, and an empty session disconnects after five minutes. These
+limits can be changed with the variables in `.env.example`.
 
 ## Validate and build
 

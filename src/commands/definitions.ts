@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 
 export const HELP_TEXT = [
   '**Musina commands**',
-  '`/play <url>` — play or queue YouTube, SoundCloud, or UwUFUFU selections',
+  '`/play <url>` — play or queue YouTube, YouTube playlists, SoundCloud, or UwUFUFU selections',
   '`/skip` — skip the current track',
   '`/stop` — stop playback and leave voice',
   '`/queue` — show the current and upcoming tracks',
@@ -17,11 +17,11 @@ export const HELP_TEXT = [
 export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play or queue a media link or UwUFUFU selections page')
+    .setDescription('Play media, a YouTube playlist, or UwUFUFU selections')
     .addStringOption((option) =>
       option
         .setName('url')
-        .setDescription('YouTube, SoundCloud, or UwUFUFU selections URL')
+        .setDescription('YouTube, YouTube playlist, SoundCloud, or UwUFUFU URL')
         .setRequired(true),
     ),
   new SlashCommandBuilder().setName('skip').setDescription('Skip the current track'),
