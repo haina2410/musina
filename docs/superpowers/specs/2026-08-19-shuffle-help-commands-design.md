@@ -2,8 +2,10 @@
 
 ## Goal
 
-Add `/shuffle` for randomizing upcoming playback and `/help` for showing concise
-usage guidance without changing the currently playing track.
+Add shuffle behavior for randomizing upcoming playback and help behavior for
+showing concise usage guidance without changing the currently playing track.
+Expose every bot command through both Discord slash commands and a leading bot
+mention.
 
 ## Considered Approaches
 
@@ -31,16 +33,27 @@ purpose of `/play`, `/skip`, `/stop`, `/queue`, `/nowplaying`, `/shuffle`, and
 `/help`. It also notes the active-voice-channel restriction on playback control
 commands.
 
+A leading bot mention is also a command prefix. Command names are
+case-insensitive, so messages such as `@musina help`, `@musina shuffle`, and
+`@musina stop` invoke the same behavior and validation as their slash-command
+counterparts. `@musina play <url>` is the explicit mention form for playback,
+while the existing `@musina <url>` shorthand remains supported. Mention-command
+replies are ordinary channel replies because message interactions cannot be
+ephemeral.
+
 ## Components and Data Flow
 
 - The slash-command definitions add `shuffle` and `help` registrations.
 - `PlaybackManager.shuffle(member)` validates the active session and caller's
   voice channel, then mutates only the session's upcoming queue.
-- The Discord interaction handler explicitly dispatches all known commands.
-  `/shuffle` delegates to the playback manager; `/help` replies with the shared
-  help text and the ephemeral flag.
+- A small mention parser recognizes a leading `<@bot-id>` or `<@!bot-id>`,
+  normalizes the command name, and returns its remaining argument without any
+  Discord or playback dependency.
+- The Discord interaction and message handlers explicitly dispatch all known
+  commands. Shuffle delegates to the playback manager; slash-command help uses
+  the ephemeral flag; mention-command help uses a normal reply.
 - The README command list is updated so operator documentation matches the
-  registered commands.
+  registered commands and describes mention syntax.
 
 ## Error Handling
 
@@ -53,6 +66,9 @@ The handler will not silently treat an unknown command as `/nowplaying`; each
 supported command has an explicit branch, and an unexpected name produces a
 generic unsupported-command error.
 
+An unknown mention command returns guidance to use `@musina help`. Mention
+playback without a supported URL retains the existing supported-link guidance.
+
 ## Testing
 
 Playback manager tests will make randomness deterministic and verify that:
@@ -64,12 +80,17 @@ Playback manager tests will make randomness deterministic and verify that:
 - callers outside the active voice channel are rejected.
 
 Command tests will verify that both definitions are registered and that `/help`
-is represented in the shared help content. The full test, lint, typecheck, and
-build commands must pass.
+is represented in the shared help content. Parser tests will cover both Discord
+mention forms, case-insensitive commands, arguments, non-leading mentions, and
+the URL shorthand. Handler tests will verify that mention commands dispatch to
+the same playback operations as slash commands. The full test, lint, typecheck,
+and build commands must pass.
 
 ## Out of Scope
 
 - Moving or replaying the current track.
 - Persisting a shuffled order across bot restarts.
 - Adding shuffle modes, seeds, undo, or per-user help localization.
+- Supporting natural-language commands or command aliases beyond the existing
+  URL shorthand.
 - Refactoring the command handler into a new command framework.
