@@ -282,4 +282,83 @@ describe('PlaybackManager voice channel status', () => {
     await vi.advanceTimersByTimeAsync(300_000);
     expect(voice.connection.destroy).toHaveBeenCalledOnce();
   });
+
+  it('pauses and resumes playback through the manual controls', async () => {
+    const { inspect, manager, member, textChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+
+    expect(manager.pause(member)).toBe('Paused.');
+    expect(() => manager.pause(member)).toThrow('Playback is already paused.');
+    expect(manager.resume(member)).toBe('Resumed.');
+    expect(() => manager.resume(member)).toThrow('Playback is not paused.');
+
+    expect(voice.player.pause).toHaveBeenCalledOnce();
+    expect(voice.player.unpause).toHaveBeenCalledOnce();
+    expect(voiceStatus.setPaused).toHaveBeenCalledWith('voice-1', false);
+    expect(voiceStatus.set).toHaveBeenLastCalledWith('voice-1', 'One');
+  });
+
+  it('allows the next track to be paused after skipping a manually paused track', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+
+    manager.pause(member);
+    manager.skip(member);
+    idle();
+
+    expect(manager.pause(member)).toBe('Paused.');
+    expect(voice.player.pause).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a manual pause when a listener returns', async () => {
+    vi.useFakeTimers();
+    const { guild, inspect, manager, member, textChannel, voiceChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+    manager.pause(member);
+
+    voiceChannel.members.clear();
+    manager.handleVoiceStateUpdate(
+      { channelId: 'voice-1', guild } as never,
+      { channelId: null, guild } as never,
+    );
+    voiceChannel.members.set('user-1', member);
+    manager.handleVoiceStateUpdate(
+      { channelId: null, guild } as never,
+      { channelId: 'voice-1', guild } as never,
+    );
+
+    expect(voice.player.pause).toHaveBeenCalledOnce();
+    expect(voice.player.unpause).not.toHaveBeenCalled();
+    expect(voiceStatus.setPaused).toHaveBeenLastCalledWith('voice-1', false);
+  });
+
+  it('does not reset the empty-channel timeout for repeated empty updates', async () => {
+    vi.useFakeTimers();
+    const { guild, inspect, manager, member, textChannel, voiceChannel, voiceStatus } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+    voiceChannel.members.clear();
+
+    manager.handleVoiceStateUpdate(
+      { channelId: 'voice-1', guild } as never,
+      { channelId: null, guild } as never,
+    );
+    await vi.advanceTimersByTimeAsync(150_000);
+    manager.handleVoiceStateUpdate(
+      { channelId: 'voice-1', guild } as never,
+      { channelId: null, guild } as never,
+    );
+    await vi.advanceTimersByTimeAsync(150_000);
+
+    expect(voice.player.pause).toHaveBeenCalledOnce();
+    expect(voiceStatus.setPaused).toHaveBeenCalledOnce();
+    expect(voice.connection.destroy).toHaveBeenCalledOnce();
+  });
 });
