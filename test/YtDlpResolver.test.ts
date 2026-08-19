@@ -33,6 +33,7 @@ describe('YtDlpResolver', () => {
         entries: [
           { duration: 185, title: ' First ', url: 'https://www.youtube.com/watch?v=abcdefghijk' },
           { duration: null, title: 'Second', webpage_url: 'https://youtu.be/lmnopqrst' },
+          { title: 'A channel', url: 'https://www.youtube.com/@musician' },
           { title: 'Not media', url: 'https://example.com/nope' },
         ],
       }));

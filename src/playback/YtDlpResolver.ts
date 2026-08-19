@@ -62,7 +62,9 @@ export class YtDlpResolver {
       if (typeof rawUrl !== 'string') return [];
       try {
         const media = validateMediaUrl(rawUrl);
-        if (media.source !== 'youtube' || media.url.length > 100) return [];
+        if (media.source !== 'youtube' || media.url.length > 100 || !isYoutubeVideoUrl(media.url)) {
+          return [];
+        }
         const duration = typeof metadata.duration === 'number'
           && Number.isFinite(metadata.duration)
           && metadata.duration >= 0
@@ -122,4 +124,13 @@ export class YtDlpResolver {
       });
     });
   }
+}
+
+function isYoutubeVideoUrl(input: string): boolean {
+  const url = new URL(input);
+  if (url.hostname.toLowerCase() === 'youtu.be') {
+    return url.pathname.split('/').filter(Boolean).length === 1;
+  }
+  if (url.pathname === '/watch') return Boolean(url.searchParams.get('v')?.trim());
+  return /^\/(?:embed|live|shorts)\/[^/]+\/?$/.test(url.pathname);
 }
