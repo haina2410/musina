@@ -37,6 +37,14 @@ export interface ImportProgress {
   total: number;
 }
 
+export interface QueuePage {
+  content: string;
+  page: number;
+  totalPages: number;
+}
+
+const QUEUE_PAGE_SIZE = 10;
+
 export type ImportProgressCallback = (progress: ImportProgress) => void | Promise<void>;
 
 export class PlaybackManager {
@@ -167,6 +175,18 @@ export class PlaybackManager {
     return 'Skipped.';
   }
 
+  skipTo(member: GuildMember, position: number): string {
+    const session = this.requireSameChannel(member);
+    if (!Number.isSafeInteger(position) || position < 1) {
+      throw new Error('Provide a positive whole-number queue position.');
+    }
+    const target = session.queue[position - 1];
+    if (!target) throw new Error(`Queue position ${position} does not exist.`);
+    session.queue.splice(0, position - 1);
+    session.player.stop(true);
+    return `Skipping to **${this.safeTitle(target.title)}**.`;
+  }
+
   pause(member: GuildMember): string {
     const session = this.requireSameChannel(member);
     if (!session.current) throw new Error('Nothing is playing.');
@@ -211,13 +231,27 @@ export class PlaybackManager {
     return `Shuffled ${queue.length} tracks.`;
   }
 
-  queue(guildId: string): string {
+  queuePage(guildId: string, requestedPage = 0): QueuePage {
     const session = this.sessions.get(guildId);
-    if (!session?.current) return 'Nothing is playing.';
-    const upcoming = session.queue.slice(0, 10).map((track, index) =>
-      `${index + 1}. ${this.safeTitle(track.title)}`,
+    if (!session?.current) return { content: 'Nothing is playing.', page: 0, totalPages: 0 };
+    const totalPages = Math.max(1, Math.ceil(session.queue.length / QUEUE_PAGE_SIZE));
+    const page = Math.min(
+      Math.max(0, Number.isSafeInteger(requestedPage) ? requestedPage : 0),
+      totalPages - 1,
     );
-    return [`Now: **${this.safeTitle(session.current.title)}**`, ...upcoming].join('\n');
+    const start = page * QUEUE_PAGE_SIZE;
+    const upcoming = session.queue.slice(start, start + QUEUE_PAGE_SIZE).map((value, index) =>
+      `${start + index + 1}. ${this.safeTitle(value.title)}`,
+    );
+    return {
+      content: [`Now: **${this.safeTitle(session.current.title)}**`, ...upcoming].join('\n'),
+      page,
+      totalPages,
+    };
+  }
+
+  queue(guildId: string): string {
+    return this.queuePage(guildId).content;
   }
 
   nowPlaying(guildId: string): string {

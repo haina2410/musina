@@ -106,6 +106,97 @@ function fixture(maxQueueSize = 50) {
   };
 }
 
+async function enqueueNumberedTracks(
+  count: number,
+  fixtureValue: ReturnType<typeof fixture>,
+): Promise<void> {
+  for (let position = 1; position <= count; position += 1) {
+    fixtureValue.inspect.mockResolvedValueOnce(track(`url-${position}`, `Track ${position}`));
+    await fixtureValue.manager.enqueue(fixtureValue.member, fixtureValue.textChannel, `url-${position}`);
+  }
+}
+
+describe('PlaybackManager.queuePage', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('renders ten upcoming tracks with absolute positions on each page', async () => {
+    const value = fixture();
+    await enqueueNumberedTracks(23, value);
+
+    expect(value.manager.queuePage('guild-1', 1)).toEqual({
+      content: [
+        'Now: **Track 1**',
+        '11. Track 12',
+        '12. Track 13',
+        '13. Track 14',
+        '14. Track 15',
+        '15. Track 16',
+        '16. Track 17',
+        '17. Track 18',
+        '18. Track 19',
+        '19. Track 20',
+        '20. Track 21',
+      ].join('\n'),
+      page: 1,
+      totalPages: 3,
+    });
+  });
+
+  it('clamps a requested page to the current final page', async () => {
+    const value = fixture();
+    await enqueueNumberedTracks(13, value);
+
+    expect(value.manager.queuePage('guild-1', 99)).toMatchObject({
+      page: 1,
+      totalPages: 2,
+    });
+  });
+
+  it('returns an empty result without navigation metadata', () => {
+    expect(fixture().manager.queuePage('guild-1', 2)).toEqual({
+      content: 'Nothing is playing.',
+      page: 0,
+      totalPages: 0,
+    });
+  });
+});
+
+describe('PlaybackManager.skipTo', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('drops preceding tracks and advances to the requested upcoming position', async () => {
+    const value = fixture();
+    await enqueueNumberedTracks(5, value);
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+
+    expect(value.manager.skipTo(value.member, 3)).toBe('Skipping to **Track 4**.');
+    expect(voice.player.stop).toHaveBeenCalledWith(true);
+    idle();
+
+    expect(value.manager.nowPlaying('guild-1')).toBe('Now playing **Track 4**.');
+    expect(value.manager.queue('guild-1')).toBe('Now: **Track 4**\n1. Track 5');
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('rejects invalid position %s without stopping', async (position) => {
+    const value = fixture();
+    await enqueueNumberedTracks(2, value);
+
+    expect(() => value.manager.skipTo(value.member, position))
+      .toThrow('Provide a positive whole-number queue position.');
+    expect(voice.player.stop).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unavailable position without changing the queue', async () => {
+    const value = fixture();
+    await enqueueNumberedTracks(2, value);
+
+    expect(() => value.manager.skipTo(value.member, 2))
+      .toThrow('Queue position 2 does not exist.');
+    expect(value.manager.queue('guild-1')).toBe('Now: **Track 1**\n1. Track 2');
+    expect(voice.player.stop).not.toHaveBeenCalled();
+  });
+});
+
 describe('PlaybackManager search', () => {
   beforeEach(() => vi.clearAllMocks());
 
