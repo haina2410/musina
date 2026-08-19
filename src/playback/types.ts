@@ -14,6 +14,12 @@ export interface ResolvedAudio {
   track: Track;
 }
 
+export interface SearchCandidate {
+  durationSeconds: number | null;
+  title: string;
+  url: string;
+}
+
 export interface QueuedRequest {
   requestedBy: string;
   url: string;
