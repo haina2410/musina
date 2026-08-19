@@ -11,7 +11,7 @@ import {
 } from '@discordjs/voice';
 import type { GuildMember, SendableChannels, VoiceBasedChannel } from 'discord.js';
 import type { Logger } from 'pino';
-import type { ResolvedAudio, Track } from './types.js';
+import type { ResolvedAudio, SearchCandidate, Track } from './types.js';
 import type { VoiceChannelStatus } from './VoiceChannelStatus.js';
 import type { YtDlpResolver } from './YtDlpResolver.js';
 
@@ -43,6 +43,23 @@ export class PlaybackManager {
     this.requireQueueCapacity(member.guild.id);
     const track = await this.resolver.inspect(url, member.id);
     return this.addTrack(member, voiceChannel, textChannel, track);
+  }
+
+  async enqueueQuery(
+    member: GuildMember,
+    textChannel: SendableChannels,
+    query: string,
+  ): Promise<string> {
+    const voiceChannel = this.requirePlaybackChannel(member);
+    this.requireQueueCapacity(member.guild.id);
+    const [candidate] = await this.resolver.search(query, 1);
+    if (!candidate) throw new Error('No YouTube results found.');
+    const track = await this.resolver.inspect(candidate.url, member.id);
+    return this.addTrack(member, voiceChannel, textChannel, track);
+  }
+
+  async search(query: string): Promise<SearchCandidate[]> {
+    return this.resolver.search(query, 5);
   }
 
   async enqueueMany(
