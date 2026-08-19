@@ -146,7 +146,29 @@ describe('PlaybackManager.queuePage', () => {
     const value = fixture();
     await enqueueNumberedTracks(13, value);
 
-    expect(value.manager.queuePage('guild-1', 99)).toMatchObject({
+    expect(value.manager.queuePage('guild-1', 0)).toEqual({
+      content: [
+        'Now: **Track 1**',
+        '1. Track 2',
+        '2. Track 3',
+        '3. Track 4',
+        '4. Track 5',
+        '5. Track 6',
+        '6. Track 7',
+        '7. Track 8',
+        '8. Track 9',
+        '9. Track 10',
+        '10. Track 11',
+      ].join('\n'),
+      page: 0,
+      totalPages: 2,
+    });
+    expect(value.manager.queuePage('guild-1', 99)).toEqual({
+      content: [
+        'Now: **Track 1**',
+        '11. Track 12',
+        '12. Track 13',
+      ].join('\n'),
       page: 1,
       totalPages: 2,
     });

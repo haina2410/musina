@@ -465,6 +465,85 @@ describe('createBot', () => {
     expect(playback.queuePage).toHaveBeenCalledWith('guild-1', 4);
   });
 
+  it('contains an unacknowledged queue-button update failure when its reply also fails', async () => {
+    const client = new EventEmitter();
+    const updateError = new Error('Discord is unavailable.');
+    const replyError = new Error('Reply is unavailable.');
+    const reply = vi.fn().mockRejectedValue(replyError);
+    const interaction = {
+      channel: { isSendable: () => true },
+      customId: 'musina-queue:v1:1001:4',
+      deferUpdate: vi.fn().mockRejectedValue(updateError),
+      deferred: false,
+      guildId: 'guild-1',
+      inCachedGuild: () => true,
+      isButton: () => true,
+      isChatInputCommand: () => false,
+      isStringSelectMenu: () => false,
+      replied: false,
+      reply,
+      user: { id: '1001' },
+    };
+    const playback = { queuePage: vi.fn() };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({
+      content: 'Something went wrong.',
+      ephemeral: true,
+    }));
+    await vi.waitFor(() => expect(logger.warn).toHaveBeenCalledWith(
+      { command: 'queue-button-response', error: replyError },
+      'failed to report queue button failure',
+    ));
+    expect(playback.queuePage).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      { command: 'queue-button', error: updateError },
+      'queue button update failed',
+    );
+  });
+
+  it('reports an acknowledged queue-button edit failure with an ephemeral follow-up', async () => {
+    const client = new EventEmitter();
+    const editError = new Error('Original reply is unavailable.');
+    const followUp = vi.fn().mockResolvedValue(undefined);
+    let acknowledged = false;
+    const interaction = {
+      channel: { isSendable: () => true },
+      customId: 'musina-queue:v1:1001:4',
+      deferUpdate: vi.fn(async () => { acknowledged = true; }),
+      get deferred() { return acknowledged; },
+      editReply: vi.fn().mockRejectedValue(editError),
+      followUp,
+      guildId: 'guild-1',
+      inCachedGuild: () => true,
+      isButton: () => true,
+      isChatInputCommand: () => false,
+      isStringSelectMenu: () => false,
+      replied: false,
+      reply: vi.fn().mockResolvedValue(undefined),
+      user: { id: '1001' },
+    };
+    const playback = {
+      queuePage: vi.fn(() => ({ content: 'Now: **Live**', page: 0, totalPages: 1 })),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(followUp).toHaveBeenCalledWith({
+      content: 'Something went wrong.',
+      ephemeral: true,
+    }));
+    expect(logger.warn).toHaveBeenCalledWith(
+      { command: 'queue-button', error: editError },
+      'queue button update failed',
+    );
+  });
+
   it('replies to the help slash command with an ephemeral command guide', async () => {
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);

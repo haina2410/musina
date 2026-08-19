@@ -44,7 +44,7 @@ export function createBot(
     } else if (interaction.isStringSelectMenu()) {
       void handleSearchSelection(interaction, playback, logger);
     } else if (interaction.isButton()) {
-      void handleQueueButton(interaction, playback);
+      void handleQueueButton(interaction, playback, logger);
     }
   });
   client.on('messageCreate', (message) => void handleMessage(message, playback, playInput, logger));
@@ -301,25 +301,42 @@ async function handleSearchSelection(
 async function handleQueueButton(
   interaction: ButtonInteraction,
   playback: PlaybackManager,
+  logger: Logger,
 ): Promise<void> {
   const button = parseQueueButtonId(interaction.customId);
   if (!button) return;
-  if (interaction.user.id !== button.requesterId) {
-    await interaction.reply({
-      content: 'Only the user who requested this queue can change pages.',
-      ephemeral: true,
-    });
-    return;
+  try {
+    if (interaction.user.id !== button.requesterId) {
+      await interaction.reply({
+        content: 'Only the user who requested this queue can change pages.',
+        ephemeral: true,
+      });
+      return;
+    }
+    if (!interaction.inCachedGuild() || !interaction.channel?.isSendable()) {
+      await interaction.reply({
+        content: 'This queue only works in a server text channel.',
+        ephemeral: true,
+      });
+      return;
+    }
+    await interaction.deferUpdate();
+    await interaction.editReply(queueReply(playback, interaction.guildId, interaction.user.id, button.page));
+  } catch (error) {
+    logger.warn({ error, command: 'queue-button' }, 'queue button update failed');
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Something went wrong.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Something went wrong.', ephemeral: true });
+      }
+    } catch (responseError) {
+      logger.warn(
+        { error: responseError, command: 'queue-button-response' },
+        'failed to report queue button failure',
+      );
+    }
   }
-  if (!interaction.inCachedGuild() || !interaction.channel?.isSendable()) {
-    await interaction.reply({
-      content: 'This queue only works in a server text channel.',
-      ephemeral: true,
-    });
-    return;
-  }
-  await interaction.deferUpdate();
-  await interaction.editReply(queueReply(playback, interaction.guildId, interaction.user.id, button.page));
 }
 
 async function runPlayInput(
