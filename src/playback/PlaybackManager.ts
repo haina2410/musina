@@ -30,6 +30,15 @@ interface Session {
   textChannel: SendableChannels;
 }
 
+export interface ImportProgress {
+  added: number;
+  processed: number;
+  skipped: number;
+  total: number;
+}
+
+export type ImportProgressCallback = (progress: ImportProgress) => void | Promise<void>;
+
 export class PlaybackManager {
   private readonly sessions = new Map<string, Session>();
 
@@ -70,15 +79,19 @@ export class PlaybackManager {
     textChannel: SendableChannels,
     urls: readonly string[],
     initialSkipped = 0,
+    onProgress?: ImportProgressCallback,
   ): Promise<string> {
     const voiceChannel = this.requirePlaybackChannel(member);
     let added = 0;
     let skipped = initialSkipped;
     let firstResult = '';
+    const total = initialSkipped + urls.length;
+    const report = async (processed: number) => onProgress?.({ added, processed, skipped, total });
 
     for (const [index, url] of urls.entries()) {
       if (!this.hasQueueCapacity(member.guild.id)) {
         skipped += urls.length - index;
+        await report(total);
         break;
       }
 
@@ -88,16 +101,19 @@ export class PlaybackManager {
       } catch (error) {
         this.logger.warn({ error, guildId: member.guild.id, url }, 'skipping list track');
         skipped += 1;
+        await report(initialSkipped + index + 1);
         continue;
       }
 
       if (!this.hasQueueCapacity(member.guild.id)) {
         skipped += urls.length - index;
+        await report(total);
         break;
       }
       const result = this.addTrack(member, voiceChannel, textChannel, track);
       if (!firstResult) firstResult = result;
       added += 1;
+      await report(initialSkipped + index + 1);
     }
 
     if (added === 0) throw new Error('No tracks from that list could be queued.');

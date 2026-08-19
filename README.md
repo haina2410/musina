@@ -32,6 +32,10 @@ enforced. For example:
 https://www.uwufufu.com/worldcup/vpop-vit-nam-c-in-tn-trng-yeetuzmymeatuz
 ```
 
+While Musina inspects the shuffled songs, it edits one reply with the number
+checked, queued, and skipped. The normal import result replaces that progress
+text when queueing finishes.
+
 ## Requirements
 
 - Node.js 22 or newer

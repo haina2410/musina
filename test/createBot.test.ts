@@ -64,6 +64,58 @@ describe('createBot', () => {
     expect(playback.enqueue).not.toHaveBeenCalled();
   });
 
+  it('edits one deferred slash reply through UwUFUFU progress and completion', async () => {
+    const client = new EventEmitter();
+    const channel = { isSendable: () => true };
+    const member = { id: 'member-1' };
+    const editReply = vi.fn().mockResolvedValue(undefined);
+    const interaction = {
+      channel,
+      commandName: 'play',
+      deferReply: vi.fn().mockResolvedValue(undefined),
+      deferred: true,
+      editReply,
+      inCachedGuild: () => true,
+      isChatInputCommand: () => true,
+      member,
+      options: { getString: vi.fn().mockReturnValue('https://www.uwufufu.com/worldcup/songs') },
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+    const enqueueMany = vi.fn(async (...args: unknown[]) => {
+      const progress = args[4] as (snapshot: {
+        added: number;
+        processed: number;
+        skipped: number;
+        total: number;
+      }) => Promise<void>;
+      await progress({ added: 2, processed: 3, skipped: 1, total: 3 });
+      return 'Imported 2 tracks (1 skipped). Now playing **One**.';
+    });
+    const playback = { enqueueMany };
+    const playInput = {
+      resolve: vi.fn().mockResolvedValue({
+        kind: 'batch',
+        skipped: 1,
+        source: 'uwufufu',
+        urls: ['one', 'two'],
+      }),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never, playInput as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(editReply).toHaveBeenLastCalledWith(
+      'Imported 2 tracks (1 skipped). Now playing **One**.',
+    ));
+    expect(editReply.mock.calls.map(([content]) => content)).toEqual([
+      'Found 3 UwUFUFU songs. Checking tracks…',
+      'UwUFUFU import: checked 3/3 • queued 2 • skipped 1',
+      'Imported 2 tracks (1 skipped). Now playing **One**.',
+    ]);
+    expect(enqueueMany).toHaveBeenCalledWith(member, channel, ['one', 'two'], 1, expect.any(Function));
+  });
+
   it('shows a requester-bound menu for slash search', async () => {
     const client = new EventEmitter();
     const editReply = vi.fn().mockResolvedValue(undefined);
@@ -438,7 +490,8 @@ describe('createBot', () => {
         data: [{ videoUrl: 'https://www.youtube.com/embed/FN7ALfpGxiI' }],
       }), { status: 200 })));
     const client = new EventEmitter();
-    const reply = vi.fn().mockResolvedValue(undefined);
+    const edit = vi.fn().mockResolvedValue(undefined);
+    const reply = vi.fn().mockResolvedValue({ edit });
     const channel = { isSendable: () => true, sendTyping: vi.fn().mockResolvedValue(undefined) };
     const member = { id: 'member-1' };
     const message = {
@@ -452,23 +505,40 @@ describe('createBot', () => {
       mentions: { users: { has: (id: string) => id === 'bot-1' } },
       reply,
     };
-    const playback = {
-      enqueueMany: vi.fn().mockResolvedValue('Imported 1 track (0 skipped). Now playing **One**.'),
-    };
+    const enqueueMany = vi.fn(async (...args: unknown[]) => {
+      const progress = args[4] as (snapshot: {
+        added: number;
+        processed: number;
+        skipped: number;
+        total: number;
+      }) => Promise<void>;
+      await progress({ added: 1, processed: 1, skipped: 0, total: 1 });
+      return 'Imported 1 track (0 skipped). Now playing **One**.';
+    });
+    const playback = { enqueueMany };
     const logger = { info: vi.fn(), warn: vi.fn() };
     createBot(playback as never, logger as never, client as never);
 
     client.emit('messageCreate', message);
 
-    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({
+    await vi.waitFor(() => expect(edit).toHaveBeenLastCalledWith(
+      'Imported 1 track (0 skipped). Now playing **One**.',
+    ));
+    expect(reply).toHaveBeenCalledOnce();
+    expect(reply).toHaveBeenCalledWith({
       allowedMentions: { repliedUser: false },
-      content: 'Imported 1 track (0 skipped). Now playing **One**.',
-    }));
-    expect(playback.enqueueMany).toHaveBeenCalledWith(
+      content: 'Found 1 UwUFUFU songs. Checking tracks…',
+    });
+    expect(edit.mock.calls.map(([content]) => content)).toEqual([
+      'UwUFUFU import: checked 1/1 • queued 1 • skipped 0',
+      'Imported 1 track (0 skipped). Now playing **One**.',
+    ]);
+    expect(enqueueMany).toHaveBeenCalledWith(
       member,
       channel,
       ['https://www.youtube.com/watch?v=FN7ALfpGxiI'],
       0,
+      expect.any(Function),
     );
   });
 
@@ -496,6 +566,7 @@ describe('createBot', () => {
       resolve: vi.fn().mockResolvedValue({
         kind: 'batch',
         skipped: 0,
+        source: 'youtube-playlist',
         urls: [
           'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
           'https://www.youtube.com/watch?v=abcdefghijk',

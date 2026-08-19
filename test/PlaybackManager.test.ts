@@ -163,6 +163,34 @@ describe('PlaybackManager.enqueueMany', () => {
     expect(manager.queue('guild-1')).toBe('Now: **One**\n1. Three');
   });
 
+  it('reports each imported, rejected, and pre-filtered entry', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    const progress: Array<{
+      added: number;
+      processed: number;
+      skipped: number;
+      total: number;
+    }> = [];
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(track('https://youtu.be/three', 'Three'));
+
+    await manager.enqueueMany(
+      member,
+      textChannel,
+      ['one', 'bad', 'three'],
+      1,
+      (snapshot) => { progress.push(snapshot); },
+    );
+
+    expect(progress).toEqual([
+      { added: 1, processed: 2, skipped: 1, total: 4 },
+      { added: 1, processed: 3, skipped: 2, total: 4 },
+      { added: 2, processed: 4, skipped: 2, total: 4 },
+    ]);
+  });
+
   it('counts overflow as skipped without inspecting it', async () => {
     const { inspect, manager, member, textChannel } = fixture(1);
     inspect
@@ -173,6 +201,33 @@ describe('PlaybackManager.enqueueMany', () => {
       .resolves.toBe('Imported 2 tracks (1 skipped). Now playing **One**.');
     expect(inspect).toHaveBeenCalledTimes(2);
     expect(manager.queue('guild-1')).toBe('Now: **One**\n1. Two');
+  });
+
+  it('reports uninspected queue overflow as terminal progress', async () => {
+    const { inspect, manager, member, textChannel } = fixture(1);
+    const progress: Array<{
+      added: number;
+      processed: number;
+      skipped: number;
+      total: number;
+    }> = [];
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+
+    await manager.enqueueMany(
+      member,
+      textChannel,
+      ['one', 'two', 'three'],
+      0,
+      (snapshot) => { progress.push(snapshot); },
+    );
+
+    expect(progress).toEqual([
+      { added: 1, processed: 1, skipped: 0, total: 3 },
+      { added: 2, processed: 2, skipped: 0, total: 3 },
+      { added: 2, processed: 3, skipped: 1, total: 3 },
+    ]);
   });
 
   it('includes entries rejected by the list importer in the skipped count', async () => {

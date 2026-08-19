@@ -58,6 +58,7 @@ describe('PlayInput', () => {
     await expect(input.resolve(url)).resolves.toEqual({
       kind: 'batch',
       skipped: 1,
+      source: 'youtube-playlist',
       urls: [
         'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
         'https://www.youtube.com/watch?v=abcdefghijk',
@@ -87,6 +88,7 @@ describe('PlayInput', () => {
     await expect(input.resolve(url)).resolves.toEqual({
       kind: 'batch',
       skipped: 0,
+      source: 'uwufufu',
       urls: [
         'https://www.youtube.com/watch?v=30KI5SuECuc',
         'https://www.youtube.com/watch?v=FN7ALfpGxiI',

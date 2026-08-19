@@ -12,9 +12,10 @@ import type { Logger } from 'pino';
 import { HELP_TEXT } from '../commands/definitions.js';
 import { parseMentionCommand } from '../commands/mention.js';
 import { buildSearchMenu, parseSearchMenuId } from '../commands/searchMenu.js';
-import type { PlaybackManager } from '../playback/PlaybackManager.js';
+import type { ImportProgressCallback, PlaybackManager } from '../playback/PlaybackManager.js';
 import { PlayInput, type ResolvedPlayInput } from '../playback/PlayInput.js';
 import { findSupportedUrl } from '../playback/urlPolicy.js';
+import { createImportProgressReporter, uwufufuImportStart } from './importProgress.js';
 
 export function createDiscordClient(): Client {
   return new Client({
@@ -63,7 +64,21 @@ async function handleCommand(
     if (interaction.commandName === 'play') {
       await interaction.deferReply();
       const input = await playInput.resolve(interaction.options.getString('input', true));
-      const result = await runPlayInput(input, playback, interaction.member, interaction.channel);
+      let onProgress: ImportProgressCallback | undefined;
+      if (input.kind === 'batch' && input.source === 'uwufufu') {
+        await interaction.editReply(uwufufuImportStart(input.urls.length + input.skipped));
+        onProgress = createImportProgressReporter(
+          (content) => interaction.editReply(content),
+          logger,
+        );
+      }
+      const result = await runPlayInput(
+        input,
+        playback,
+        interaction.member,
+        interaction.channel,
+        onProgress,
+      );
       await interaction.editReply(result);
       return;
     }
@@ -145,17 +160,40 @@ async function handleMessage(
     await message.reply({ content, allowedMentions: { repliedUser: false } });
     return;
   }
+  let progressMessage: { edit(content: string): Promise<unknown> } | null = null;
   try {
     await message.channel.sendTyping();
     const resolved = await playInput.resolve(input);
-    const result = await runPlayInput(resolved, playback, message.member!, message.channel);
-    await message.reply({ content: result, allowedMentions: { repliedUser: false } });
+    let onProgress: ImportProgressCallback | undefined;
+    if (resolved.kind === 'batch' && resolved.source === 'uwufufu') {
+      progressMessage = await message.reply({
+        content: uwufufuImportStart(resolved.urls.length + resolved.skipped),
+        allowedMentions: { repliedUser: false },
+      });
+      onProgress = createImportProgressReporter(
+        (content) => progressMessage!.edit(content),
+        logger,
+      );
+    }
+    const result = await runPlayInput(
+      resolved,
+      playback,
+      message.member!,
+      message.channel,
+      onProgress,
+    );
+    if (progressMessage) await progressMessage.edit(result);
+    else await message.reply({ content: result, allowedMentions: { repliedUser: false } });
   } catch (error) {
     logger.warn({ error }, 'message play request failed');
-    await message.reply({
-      content: error instanceof Error ? error.message : 'Something went wrong.',
-      allowedMentions: { repliedUser: false },
-    });
+    const content = error instanceof Error ? error.message : 'Something went wrong.';
+    if (progressMessage) await progressMessage.edit(content);
+    else {
+      await message.reply({
+        content,
+        allowedMentions: { repliedUser: false },
+      });
+    }
   }
 }
 
@@ -209,8 +247,12 @@ async function runPlayInput(
   playback: PlaybackManager,
   member: GuildMember,
   channel: SendableChannels,
+  onProgress?: ImportProgressCallback,
 ): Promise<string> {
   if (input.kind === 'batch') {
+    if (onProgress) {
+      return playback.enqueueMany(member, channel, input.urls, input.skipped, onProgress);
+    }
     return playback.enqueueMany(member, channel, input.urls, input.skipped);
   }
   if (input.kind === 'query') return playback.enqueueQuery(member, channel, input.query);
