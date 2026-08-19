@@ -21,13 +21,15 @@ to fill the current-track slot and the upcoming queue when playback is empty.
 Unavailable entries are skipped and the existing per-server queue limit still
 applies.
 
-`/play` also accepts an UwUFUFU selections API URL and imports the usable YouTube
-videos from that response page in order. It does not fetch additional pages.
-Invalid or unavailable entries are skipped, and the configured queue capacity is
-still enforced. For example:
+`/play` also accepts a public UwUFUFU song-game link. It discovers the game's
+internal ID, fetches every selection, and shuffles all usable YouTube videos
+before filling the queue. This gives every song a chance to be selected even
+when the game is larger than the configured queue capacity. Invalid or
+unavailable entries are skipped, and the existing queue limit is still
+enforced. For example:
 
 ```text
-https://api.uwufufu.com/v1/selections?page=1&perPage=10&worldcupId=168808
+https://www.uwufufu.com/worldcup/vpop-vit-nam-c-in-tn-trng-yeetuzmymeatuz
 ```
 
 ## Requirements

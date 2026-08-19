@@ -2,7 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 
 export const HELP_TEXT = [
   '**Musina commands**',
-  '`/play <input>` — play a URL, playlist, UwUFUFU selections, or the best YouTube search match',
+  '`/play <input>` — play a URL, playlist, UwUFUFU game, or the best YouTube search match',
   '`/search <query>` — choose from the top five YouTube search results',
   '`/pause` — pause playback',
   '`/resume` — resume playback',
@@ -20,11 +20,11 @@ export const HELP_TEXT = [
 export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play a media URL, playlist, selections page, or YouTube search')
+    .setDescription('Play a media URL, playlist, UwUFUFU game, or YouTube search')
     .addStringOption((option) =>
       option
         .setName('input')
-        .setDescription('Media URL, playlist, selections URL, or YouTube search terms')
+        .setDescription('Media URL, playlist, UwUFUFU game, or YouTube search terms')
         .setRequired(true),
     ),
   new SlashCommandBuilder()
