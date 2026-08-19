@@ -2,7 +2,8 @@ import { SlashCommandBuilder } from 'discord.js';
 
 export const HELP_TEXT = [
   '**Musina commands**',
-  '`/play <url>` — play or queue YouTube, YouTube playlists, SoundCloud, or UwUFUFU selections',
+  '`/play <input>` — play a URL, playlist, UwUFUFU selections, or the best YouTube search match',
+  '`/search <query>` — choose from the top five YouTube search results',
   '`/skip` — skip the current track',
   '`/stop` — stop playback and leave voice',
   '`/queue` — show the current and upcoming tracks',
@@ -10,18 +11,27 @@ export const HELP_TEXT = [
   '`/shuffle` — shuffle upcoming tracks',
   '`/help` — show this guide',
   '',
-  'You can also use a leading bot mention, such as `@Musina help` or `@Musina play <url>`.',
+  'You can also use a leading bot mention, such as `@Musina play <input>` or `@Musina search <query>`.',
   'Join my active voice channel to use skip, stop, or shuffle.',
 ].join('\n');
 
 export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play media, a YouTube playlist, or UwUFUFU selections')
+    .setDescription('Play a media URL, playlist, selections page, or YouTube search')
     .addStringOption((option) =>
       option
-        .setName('url')
-        .setDescription('YouTube, YouTube playlist, SoundCloud, or UwUFUFU URL')
+        .setName('input')
+        .setDescription('Media URL, playlist, selections URL, or YouTube search terms')
+        .setRequired(true),
+    ),
+  new SlashCommandBuilder()
+    .setName('search')
+    .setDescription('Search YouTube and choose a result')
+    .addStringOption((option) =>
+      option
+        .setName('query')
+        .setDescription('YouTube search terms')
         .setRequired(true),
     ),
   new SlashCommandBuilder().setName('skip').setDescription('Skip the current track'),

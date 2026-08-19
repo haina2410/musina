@@ -5,12 +5,15 @@ import {
   type ChatInputCommandInteraction,
   type GuildMember,
   type Message,
+  type SendableChannels,
+  type StringSelectMenuInteraction,
 } from 'discord.js';
 import type { Logger } from 'pino';
 import { HELP_TEXT } from '../commands/definitions.js';
 import { parseMentionCommand } from '../commands/mention.js';
+import { buildSearchMenu, parseSearchMenuId } from '../commands/searchMenu.js';
 import type { PlaybackManager } from '../playback/PlaybackManager.js';
-import { PlayInput } from '../playback/PlayInput.js';
+import { PlayInput, type ResolvedPlayInput } from '../playback/PlayInput.js';
 import { findSupportedUrl } from '../playback/urlPolicy.js';
 
 export function createDiscordClient(): Client {
@@ -33,7 +36,11 @@ export function createBot(
 ): Client {
   client.on(Events.ClientReady, (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
   client.on('interactionCreate', (interaction) => {
-    if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
+    if (interaction.isChatInputCommand()) {
+      void handleCommand(interaction, playback, playInput, logger);
+    } else if (interaction.isStringSelectMenu()) {
+      void handleSearchSelection(interaction, playback, logger);
+    }
   });
   client.on('messageCreate', (message) => void handleMessage(message, playback, playInput, logger));
   return client;
@@ -52,11 +59,15 @@ async function handleCommand(
   try {
     if (interaction.commandName === 'play') {
       await interaction.deferReply();
-      const input = await playInput.resolve(interaction.options.getString('url', true));
-      const result = input.kind === 'batch'
-        ? await playback.enqueueMany(interaction.member, interaction.channel, input.urls, input.skipped)
-        : await playback.enqueue(interaction.member, interaction.channel, input.url);
+      const input = await playInput.resolve(interaction.options.getString('input', true));
+      const result = await runPlayInput(input, playback, interaction.member, interaction.channel);
       await interaction.editReply(result);
+      return;
+    }
+    if (interaction.commandName === 'search') {
+      await interaction.deferReply();
+      const query = interaction.options.getString('query', true);
+      await interaction.editReply(await searchReply(playback, query, interaction.user.id));
       return;
     }
     if (interaction.commandName === 'help') {
@@ -87,6 +98,29 @@ async function handleMessage(
     await message.reply({ content: HELP_TEXT, allowedMentions: { repliedUser: false } });
     return;
   }
+  if (command?.name === 'search') {
+    if (!command.argument) {
+      await message.reply({
+        content: 'Provide search terms.',
+        allowedMentions: { repliedUser: false },
+      });
+      return;
+    }
+    try {
+      await message.channel.sendTyping();
+      await message.reply({
+        ...await searchReply(playback, command.argument, message.author.id),
+        allowedMentions: { repliedUser: false },
+      });
+    } catch (error) {
+      logger.warn({ error, command: 'search' }, 'message command failed');
+      await message.reply({
+        content: error instanceof Error ? error.message : 'Something went wrong.',
+        allowedMentions: { repliedUser: false },
+      });
+    }
+    return;
+  }
   if (command && ['skip', 'stop', 'queue', 'nowplaying', 'shuffle'].includes(command.name)) {
     try {
       const result = runPlaybackCommand(command.name, playback, message.member!, message.guildId);
@@ -103,7 +137,7 @@ async function handleMessage(
   const input = command?.name === 'play' ? command.argument : findSupportedUrl(message.content);
   if (!input) {
     const content = command?.name === 'play'
-      ? 'Provide one YouTube, YouTube playlist, SoundCloud, or UwUFUFU selections HTTPS link.'
+      ? 'Provide a URL or search terms.'
       : 'Unknown command. Mention me with `help` to see available commands.';
     await message.reply({ content, allowedMentions: { repliedUser: false } });
     return;
@@ -111,9 +145,7 @@ async function handleMessage(
   try {
     await message.channel.sendTyping();
     const resolved = await playInput.resolve(input);
-    const result = resolved.kind === 'batch'
-      ? await playback.enqueueMany(message.member!, message.channel, resolved.urls, resolved.skipped)
-      : await playback.enqueue(message.member!, message.channel, resolved.url);
+    const result = await runPlayInput(resolved, playback, message.member!, message.channel);
     await message.reply({ content: result, allowedMentions: { repliedUser: false } });
   } catch (error) {
     logger.warn({ error }, 'message play request failed');
@@ -122,6 +154,72 @@ async function handleMessage(
       allowedMentions: { repliedUser: false },
     });
   }
+}
+
+async function handleSearchSelection(
+  interaction: StringSelectMenuInteraction,
+  playback: PlaybackManager,
+  logger: Logger,
+): Promise<void> {
+  const menu = parseSearchMenuId(interaction.customId);
+  if (!menu) return;
+  if (interaction.user.id !== menu.requesterId) {
+    await interaction.reply({
+      content: 'Only the user who started this search can choose a result.',
+      ephemeral: true,
+    });
+    return;
+  }
+  if (menu.expired) {
+    await interaction.reply({
+      content: 'This search has expired. Run `/search` again.',
+      ephemeral: true,
+    });
+    return;
+  }
+  if (!interaction.inCachedGuild() || !interaction.channel?.isSendable()) {
+    await interaction.reply({
+      content: 'This menu only works in a server text channel.',
+      ephemeral: true,
+    });
+    return;
+  }
+  await interaction.deferUpdate();
+  try {
+    const result = await playback.enqueue(
+      interaction.member,
+      interaction.channel,
+      interaction.values[0]!,
+    );
+    await interaction.editReply({ content: result, components: [] });
+  } catch (error) {
+    logger.warn({ error, command: 'search-selection' }, 'command failed');
+    await interaction.followUp({
+      content: error instanceof Error ? error.message : 'Something went wrong.',
+      ephemeral: true,
+    });
+  }
+}
+
+async function runPlayInput(
+  input: ResolvedPlayInput,
+  playback: PlaybackManager,
+  member: GuildMember,
+  channel: SendableChannels,
+): Promise<string> {
+  if (input.kind === 'batch') {
+    return playback.enqueueMany(member, channel, input.urls, input.skipped);
+  }
+  if (input.kind === 'query') return playback.enqueueQuery(member, channel, input.query);
+  return playback.enqueue(member, channel, input.url);
+}
+
+async function searchReply(playback: PlaybackManager, query: string, requesterId: string) {
+  const candidates = await playback.search(query);
+  return {
+    content: 'Choose a YouTube result:',
+    components: buildSearchMenu(candidates, requesterId),
+  };
 }
 
 function runPlaybackCommand(
