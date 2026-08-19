@@ -316,6 +316,23 @@ describe('PlaybackManager voice channel status', () => {
     expect(voice.player.pause).toHaveBeenCalledTimes(2);
   });
 
+  it('allows a newly queued track to be paused after skipping the final manually paused track', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+    await manager.enqueue(member, textChannel, 'one');
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+
+    manager.pause(member);
+    manager.skip(member);
+    idle();
+    await manager.enqueue(member, textChannel, 'two');
+
+    expect(manager.pause(member)).toBe('Paused.');
+    expect(voice.player.pause).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps a manual pause when a listener returns', async () => {
     vi.useFakeTimers();
     const { guild, inspect, manager, member, textChannel, voiceChannel, voiceStatus } = fixture();

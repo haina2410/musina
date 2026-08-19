@@ -237,6 +237,10 @@ export class PlaybackManager {
     if (!session.current) return;
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = null;
+    if (session.emptyTimer) clearTimeout(session.emptyTimer);
+    session.emptyTimer = null;
+    session.emptyPaused = false;
+    session.manualPaused = false;
     session.activeAudio?.cleanup();
     session.activeAudio = this.resolver.createAudio(session.current);
     session.player.play(createAudioResource(session.activeAudio.stream));
@@ -249,10 +253,6 @@ export class PlaybackManager {
     session.activeAudio = null;
     session.current = session.queue.shift() ?? null;
     if (session.current) {
-      if (session.emptyTimer) clearTimeout(session.emptyTimer);
-      session.emptyTimer = null;
-      session.emptyPaused = false;
-      session.manualPaused = false;
       this.play(session);
       void session.textChannel.send({
         content: `Now playing **${this.safeTitle(session.current.title)}**.`,
