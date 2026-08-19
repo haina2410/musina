@@ -18,4 +18,4 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 USER node
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "dist/src/index.js"]
+CMD ["sh", "-c", "node dist/scripts/registerCommands.js && exec node dist/src/index.js"]
