@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Track } from '../src/playback/types.js';
 
 const voice = vi.hoisted(() => ({
@@ -122,6 +122,56 @@ describe('PlaybackManager.enqueueMany', () => {
       .rejects.toThrow('No tracks from that list could be queued');
     expect(manager.queue('guild-1')).toBe('Nothing is playing.');
     expect(voice.joinVoiceChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlaybackManager.shuffle', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('randomizes upcoming tracks without changing the current track', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'))
+      .mockResolvedValueOnce(track('https://youtu.be/three', 'Three'))
+      .mockResolvedValueOnce(track('https://youtu.be/four', 'Four'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    await manager.enqueue(member, textChannel, 'three');
+    await manager.enqueue(member, textChannel, 'four');
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    expect(manager.shuffle(member)).toBe('Shuffled 3 tracks.');
+
+    expect(manager.queue('guild-1')).toBe('Now: **One**\n1. Three\n2. Four\n3. Two');
+    expect(random).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([0, 1])('rejects a queue with %i upcoming tracks', async (upcoming) => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect.mockResolvedValueOnce(track('https://youtu.be/one', 'One'));
+    await manager.enqueue(member, textChannel, 'one');
+    if (upcoming === 1) {
+      inspect.mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+      await manager.enqueue(member, textChannel, 'two');
+    }
+
+    expect(() => manager.shuffle(member)).toThrow('Queue at least two tracks before shuffling.');
+  });
+
+  it('rejects callers outside the active voice channel', async () => {
+    const { inspect, manager, member, textChannel } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'))
+      .mockResolvedValueOnce(track('https://youtu.be/three', 'Three'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    await manager.enqueue(member, textChannel, 'three');
+    const outsider = { ...member, voice: { channel: null, channelId: 'voice-2' } };
+
+    expect(() => manager.shuffle(outsider)).toThrow('Join my voice channel to control playback.');
   });
 });
 

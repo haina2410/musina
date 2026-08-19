@@ -7,6 +7,8 @@ import {
   type Message,
 } from 'discord.js';
 import type { Logger } from 'pino';
+import { HELP_TEXT } from '../commands/definitions.js';
+import { parseMentionCommand } from '../commands/mention.js';
 import type { PlaybackManager } from '../playback/PlaybackManager.js';
 import { PlayInput } from '../playback/PlayInput.js';
 import { findSupportedUrl } from '../playback/urlPolicy.js';
@@ -33,7 +35,7 @@ export function createBot(
   client.on('interactionCreate', (interaction) => {
     if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
   });
-  client.on('messageCreate', (message) => void handleMessage(message, playback, logger));
+  client.on('messageCreate', (message) => void handleMessage(message, playback, playInput, logger));
   return client;
 }
 
@@ -57,11 +59,12 @@ async function handleCommand(
       await interaction.editReply(result);
       return;
     }
+    if (interaction.commandName === 'help') {
+      await interaction.reply({ content: HELP_TEXT, ephemeral: true });
+      return;
+    }
     const member = interaction.member as GuildMember;
-    const result = interaction.commandName === 'skip' ? playback.skip(member)
-      : interaction.commandName === 'stop' ? playback.stop(member)
-      : interaction.commandName === 'queue' ? playback.queue(interaction.guildId)
-      : playback.nowPlaying(interaction.guildId);
+    const result = runPlaybackCommand(interaction.commandName, playback, member, interaction.guildId);
     await interaction.reply({ content: result });
   } catch (error) {
     logger.warn({ error, command: interaction.commandName }, 'command failed');
@@ -71,17 +74,46 @@ async function handleCommand(
   }
 }
 
-async function handleMessage(message: Message, playback: PlaybackManager, logger: Logger): Promise<void> {
+async function handleMessage(
+  message: Message,
+  playback: PlaybackManager,
+  playInput: PlayInput,
+  logger: Logger,
+): Promise<void> {
   if (!message.inGuild() || message.author.bot || !message.mentions.users.has(message.client.user.id)) return;
   if (!message.channel.isSendable()) return;
-  const url = findSupportedUrl(message.content);
-  if (!url) {
-    await message.reply({ content: 'Mention me with one YouTube or SoundCloud HTTPS link.', allowedMentions: { repliedUser: false } });
+  const command = parseMentionCommand(message.content, message.client.user.id);
+  if (command?.name === 'help') {
+    await message.reply({ content: HELP_TEXT, allowedMentions: { repliedUser: false } });
+    return;
+  }
+  if (command && ['skip', 'stop', 'queue', 'nowplaying', 'shuffle'].includes(command.name)) {
+    try {
+      const result = runPlaybackCommand(command.name, playback, message.member!, message.guildId);
+      await message.reply({ content: result, allowedMentions: { repliedUser: false } });
+    } catch (error) {
+      logger.warn({ error, command: command.name }, 'message command failed');
+      await message.reply({
+        content: error instanceof Error ? error.message : 'Something went wrong.',
+        allowedMentions: { repliedUser: false },
+      });
+    }
+    return;
+  }
+  const input = command?.name === 'play' ? command.argument : findSupportedUrl(message.content);
+  if (!input) {
+    const content = command?.name === 'play'
+      ? 'Provide one YouTube, SoundCloud, or UwUFUFU selections HTTPS link.'
+      : 'Unknown command. Mention me with `help` to see available commands.';
+    await message.reply({ content, allowedMentions: { repliedUser: false } });
     return;
   }
   try {
     await message.channel.sendTyping();
-    const result = await playback.enqueue(message.member!, message.channel, url);
+    const resolved = await playInput.resolve(input);
+    const result = resolved.kind === 'batch'
+      ? await playback.enqueueMany(message.member!, message.channel, resolved.urls, resolved.skipped)
+      : await playback.enqueue(message.member!, message.channel, resolved.url);
     await message.reply({ content: result, allowedMentions: { repliedUser: false } });
   } catch (error) {
     logger.warn({ error }, 'message play request failed');
@@ -89,5 +121,21 @@ async function handleMessage(message: Message, playback: PlaybackManager, logger
       content: error instanceof Error ? error.message : 'Something went wrong.',
       allowedMentions: { repliedUser: false },
     });
+  }
+}
+
+function runPlaybackCommand(
+  commandName: string,
+  playback: PlaybackManager,
+  member: GuildMember,
+  guildId: string,
+): string {
+  switch (commandName) {
+    case 'skip': return playback.skip(member);
+    case 'stop': return playback.stop(member);
+    case 'queue': return playback.queue(guildId);
+    case 'nowplaying': return playback.nowPlaying(guildId);
+    case 'shuffle': return playback.shuffle(member);
+    default: throw new Error('Unsupported command.');
   }
 }
