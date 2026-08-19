@@ -7,6 +7,7 @@ export const HELP_TEXT = [
   '`/pause` — pause playback',
   '`/resume` — resume playback',
   '`/skip` — skip the current track',
+  '`/skip-to <position>` — jump to an upcoming queue position',
   '`/stop` — stop playback and leave voice',
   '`/queue` — show the current and upcoming tracks',
   '`/nowplaying` — show the current track',
@@ -14,7 +15,7 @@ export const HELP_TEXT = [
   '`/help` — show this guide',
   '',
   'You can also use a leading bot mention, such as `@Musina play <input>` or `@Musina search <query>`.',
-  'Join my active voice channel to use pause, resume, skip, stop, or shuffle.',
+  'Join my active voice channel to use pause, resume, skip, skip-to, stop, or shuffle.',
 ].join('\n');
 
 export const commandDefinitions = [
@@ -39,6 +40,16 @@ export const commandDefinitions = [
   new SlashCommandBuilder().setName('pause').setDescription('Pause playback'),
   new SlashCommandBuilder().setName('resume').setDescription('Resume playback'),
   new SlashCommandBuilder().setName('skip').setDescription('Skip the current track'),
+  new SlashCommandBuilder()
+    .setName('skip-to')
+    .setDescription('Jump to an upcoming queue position')
+    .addIntegerOption((option) =>
+      option
+        .setName('position')
+        .setDescription('Upcoming queue position')
+        .setRequired(true)
+        .setMinValue(1),
+    ),
   new SlashCommandBuilder().setName('stop').setDescription('Stop playback and leave voice'),
   new SlashCommandBuilder().setName('queue').setDescription('Show the playback queue'),
   new SlashCommandBuilder().setName('nowplaying').setDescription('Show the current track'),

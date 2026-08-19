@@ -100,6 +100,12 @@ async function handleCommand(
       await interaction.reply(queueReply(playback, interaction.guildId, interaction.user.id));
       return;
     }
+    if (interaction.commandName === 'skip-to') {
+      const position = interaction.options.getInteger('position', true);
+      const result = playback.skipTo(interaction.member as GuildMember, position);
+      await interaction.reply({ content: result });
+      return;
+    }
     const member = interaction.member as GuildMember;
     const result = runPlaybackCommand(interaction.commandName, playback, member, interaction.guildId);
     await interaction.reply({ content: result });
@@ -155,6 +161,27 @@ async function handleMessage(
       });
     } catch (error) {
       logger.warn({ error, command: 'queue' }, 'message command failed');
+      await message.reply({
+        content: error instanceof Error ? error.message : 'Something went wrong.',
+        allowedMentions: { repliedUser: false },
+      });
+    }
+    return;
+  }
+  if (command?.name === 'skip-to') {
+    const position = parseSkipToPosition(command.argument);
+    if (position === null) {
+      await message.reply({
+        content: 'Provide a positive whole-number queue position.',
+        allowedMentions: { repliedUser: false },
+      });
+      return;
+    }
+    try {
+      const result = playback.skipTo(message.member!, position);
+      await message.reply({ content: result, allowedMentions: { repliedUser: false } });
+    } catch (error) {
+      logger.warn({ error, command: 'skip-to' }, 'message command failed');
       await message.reply({
         content: error instanceof Error ? error.message : 'Something went wrong.',
         allowedMentions: { repliedUser: false },
@@ -218,6 +245,12 @@ async function handleMessage(
       });
     }
   }
+}
+
+function parseSkipToPosition(argument: string): number | null {
+  if (!/^[1-9]\d*$/.test(argument)) return null;
+  const position = Number(argument);
+  return Number.isSafeInteger(position) ? position : null;
 }
 
 async function handleSearchSelection(

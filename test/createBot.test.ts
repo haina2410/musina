@@ -512,6 +512,31 @@ describe('createBot', () => {
     expect(playback.shuffle).toHaveBeenCalledWith(member);
   });
 
+  it('dispatches the skip-to slash command with its required position', async () => {
+    const client = new EventEmitter();
+    const member = { id: 'member-1' };
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const getInteger = vi.fn().mockReturnValue(3);
+    const interaction = {
+      channel: { isSendable: () => true },
+      commandName: 'skip-to',
+      inCachedGuild: () => true,
+      isChatInputCommand: () => true,
+      member,
+      options: { getInteger },
+      reply,
+    };
+    const playback = { skipTo: vi.fn(() => 'Skipping to **Four**.') };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(playback.skipTo).toHaveBeenCalledWith(member, 3));
+    expect(getInteger).toHaveBeenCalledWith('position', true);
+    expect(reply).toHaveBeenCalledWith({ content: 'Skipping to **Four**.' });
+  });
+
   it('replies to a mention-prefixed help command with the command guide', async () => {
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);
@@ -533,6 +558,67 @@ describe('createBot', () => {
       allowedMentions: { repliedUser: false },
       content: expect.stringContaining('/shuffle'),
     }));
+  });
+
+  it('dispatches a mention-prefixed skip-to command with its position', async () => {
+    const client = new EventEmitter();
+    const member = { id: 'member-1' };
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const message = {
+      author: { bot: false },
+      channel: { isSendable: () => true },
+      client: { user: { id: 'bot-1' } },
+      content: '<@bot-1> skip-to 3',
+      guildId: 'guild-1',
+      inGuild: () => true,
+      member,
+      mentions: { users: { has: (id: string) => id === 'bot-1' } },
+      reply,
+    };
+    const playback = { skipTo: vi.fn(() => 'Skipping to **Four**.') };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('messageCreate', message);
+
+    await vi.waitFor(() => expect(playback.skipTo).toHaveBeenCalledWith(member, 3));
+    expect(reply).toHaveBeenCalledWith({
+      allowedMentions: { repliedUser: false },
+      content: 'Skipping to **Four**.',
+    });
+  });
+
+  it.each([
+    '<@bot-1> skip-to',
+    '<@bot-1> skip-to 3.5',
+    '<@bot-1> skip-to -3',
+    '<@bot-1> skip-to 3tracks',
+    '<@bot-1> skip-to 9007199254740992',
+  ])('rejects malformed mention skip-to position %s', async (content) => {
+    const client = new EventEmitter();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const message = {
+      author: { bot: false },
+      channel: { isSendable: () => true },
+      client: { user: { id: 'bot-1' } },
+      content,
+      guildId: 'guild-1',
+      inGuild: () => true,
+      member: { id: 'member-1' },
+      mentions: { users: { has: (id: string) => id === 'bot-1' } },
+      reply,
+    };
+    const playback = { skipTo: vi.fn() };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('messageCreate', message);
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({
+      allowedMentions: { repliedUser: false },
+      content: 'Provide a positive whole-number queue position.',
+    }));
+    expect(playback.skipTo).not.toHaveBeenCalled();
   });
 
   it.each([

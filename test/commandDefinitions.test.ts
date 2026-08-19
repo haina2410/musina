@@ -9,6 +9,7 @@ describe('commandDefinitions', () => {
       'pause',
       'resume',
       'skip',
+      'skip-to',
       'stop',
       'queue',
       'nowplaying',
@@ -25,5 +26,17 @@ describe('commandDefinitions', () => {
     expect(HELP_TEXT).toContain('/play <input>');
     expect(HELP_TEXT).toContain('UwUFUFU game');
     expect(HELP_TEXT).toContain('/search <query>');
+  });
+
+  it('defines skip-to with a required positive integer position', () => {
+    const command = commandDefinitions.find((value) => value.name === 'skip-to');
+
+    expect(command?.options).toEqual([expect.objectContaining({
+      name: 'position',
+      required: true,
+      type: 4,
+      min_value: 1,
+    })]);
+    expect(HELP_TEXT).toContain('`/skip-to <position>`');
   });
 });
