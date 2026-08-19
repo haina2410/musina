@@ -138,6 +138,16 @@ export class PlaybackManager {
     return 'Stopped playback and left voice.';
   }
 
+  shuffle(member: GuildMember): string {
+    const queue = this.requireSameChannel(member).queue;
+    if (queue.length < 2) throw new Error('Queue at least two tracks before shuffling.');
+    for (let index = queue.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [queue[index], queue[target]] = [queue[target]!, queue[index]!];
+    }
+    return `Shuffled ${queue.length} tracks.`;
+  }
+
   queue(guildId: string): string {
     const session = this.sessions.get(guildId);
     if (!session?.current) return 'Nothing is playing.';
