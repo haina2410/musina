@@ -65,26 +65,42 @@ describe('PlayInput', () => {
     });
   });
 
-  it('loads an UwUFUFU selections URL as an ordered batch', async () => {
-    const url = 'https://api.uwufufu.com/v1/selections?page=1&perPage=2&worldcupId=168808';
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      perPage: 2,
-      page: 1,
-      total: 2,
-      data: [
-        { videoUrl: 'https://www.youtube.com/embed/FN7ALfpGxiI' },
-        { videoUrl: 'https://www.youtube.com/embed/30KI5SuECuc' },
-      ],
-    }), { status: 200 }));
-    const input = new PlayInput(new UwufufuImporter(fetcher));
+  it('loads a public UwUFUFU game URL as a shuffled batch', async () => {
+    const url =
+      'https://www.uwufufu.com/worldcup/vpop-vit-nam-c-in-tn-trng-yeetuzmymeatuz';
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        '<script>\\"worldcup\\":{\\"id\\":168808}</script>',
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        perPage: 1000,
+        page: 1,
+        total: 2,
+        data: [
+          { videoUrl: 'https://www.youtube.com/embed/FN7ALfpGxiI' },
+          { videoUrl: 'https://www.youtube.com/embed/30KI5SuECuc' },
+        ],
+      }), { status: 200 }));
+    const input = new PlayInput(new UwufufuImporter(fetcher, () => 0));
 
     await expect(input.resolve(url)).resolves.toEqual({
       kind: 'batch',
       skipped: 0,
       urls: [
-        'https://www.youtube.com/watch?v=FN7ALfpGxiI',
         'https://www.youtube.com/watch?v=30KI5SuECuc',
+        'https://www.youtube.com/watch?v=FN7ALfpGxiI',
       ],
     });
+  });
+
+  it('rejects a direct UwUFUFU selections API URL without fetching it', async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const input = new PlayInput(new UwufufuImporter(fetcher));
+
+    await expect(input.resolve(
+      'https://api.uwufufu.com/v1/selections?page=1&perPage=2&worldcupId=168808',
+    )).rejects.toThrow('Only YouTube and SoundCloud links are supported');
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

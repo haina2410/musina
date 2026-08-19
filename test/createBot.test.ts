@@ -424,11 +424,19 @@ describe('createBot', () => {
     expect(playback.handleVoiceStateUpdate).toHaveBeenCalledWith(oldState, newState);
   });
 
-  it('supports UwUFUFU batch playback through a mention-prefixed play command', async () => {
-    const selectionsUrl = 'https://api.uwufufu.com/v1/selections?page=1&perPage=1';
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      data: [{ videoUrl: 'https://www.youtube.com/embed/FN7ALfpGxiI' }],
-    }), { status: 200 })));
+  it('supports public UwUFUFU game playback through a mention-prefixed play command', async () => {
+    const gameUrl = 'https://www.uwufufu.com/worldcup/song-game';
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        '<script>\\"worldcup\\":{\\"id\\":168808}</script>',
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        page: 1,
+        perPage: 1000,
+        total: 1,
+        data: [{ videoUrl: 'https://www.youtube.com/embed/FN7ALfpGxiI' }],
+      }), { status: 200 })));
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);
     const channel = { isSendable: () => true, sendTyping: vi.fn().mockResolvedValue(undefined) };
@@ -437,7 +445,7 @@ describe('createBot', () => {
       author: { bot: false },
       channel,
       client: { user: { id: 'bot-1' } },
-      content: `<@bot-1> play ${selectionsUrl}`,
+      content: `<@bot-1> play ${gameUrl}`,
       guildId: 'guild-1',
       inGuild: () => true,
       member,

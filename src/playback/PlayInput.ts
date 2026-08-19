@@ -1,4 +1,4 @@
-import { UwufufuImporter, isUwufufuSelectionsUrl } from '../importers/UwufufuImporter.js';
+import { UwufufuImporter, isUwufufuGameUrl } from '../importers/UwufufuImporter.js';
 import { YoutubePlaylistImporter } from '../importers/YoutubePlaylistImporter.js';
 import { isYoutubePlaylistUrl, validateMediaUrl } from './urlPolicy.js';
 
@@ -18,7 +18,7 @@ export class PlayInput {
   async resolve(input: string): Promise<ResolvedPlayInput> {
     const value = input.trim();
     if (!value) throw new Error('Provide a URL or search terms.');
-    if (isUwufufuSelectionsUrl(value)) {
+    if (isUwufufuGameUrl(value)) {
       return { kind: 'batch', ...await this.uwufufu.load(value) };
     }
     if (isYoutubePlaylistUrl(value)) {
