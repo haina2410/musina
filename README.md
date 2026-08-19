@@ -59,14 +59,18 @@ npm run register
 npm run dev
 ```
 
-The available commands are `/play`, `/search`, `/skip`, `/stop`, `/queue`,
-`/nowplaying`, `/shuffle`, and `/help`. Search menus expire after five minutes;
-only the requester can choose a result, and voice-channel validation happens
-when they make that choice. Shuffle keeps the current track playing and
-randomizes the upcoming queue. Skip, stop, and shuffle may only be used from the
-bot's active voice channel. Tracks default to a four-hour maximum, queues
-default to 50 upcoming tracks, and an empty session disconnects after five
-minutes. These limits can be changed with the variables in `.env.example`.
+The available commands are `/play`, `/search`, `/pause`, `/resume`, `/skip`,
+`/stop`, `/queue`, `/nowplaying`, `/shuffle`, and `/help`. Search menus expire
+after five minutes; only the requester can choose a result, and voice-channel
+validation happens when they make that choice. Shuffle keeps the current track
+playing and randomizes the upcoming queue. Pause, resume, skip, stop, and
+shuffle may only be used from the bot's active voice channel. A manual pause
+requires an explicit resume. When the active voice channel becomes empty,
+Musina pauses automatically, displays `paused - waiting for someone...`, and
+resumes when a listener returns. An empty session disconnects after the
+configured five-minute default. Tracks default to a four-hour maximum and
+queues default to 50 upcoming tracks. These limits can be changed with the
+variables in `.env.example`.
 
 ## Validate and build
 

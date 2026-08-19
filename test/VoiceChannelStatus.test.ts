@@ -23,6 +23,20 @@ describe('VoiceChannelStatus', () => {
     });
   });
 
+  it('sets paused and waiting statuses without the music prefix', async () => {
+    const { put, status } = fixture();
+
+    await status.setPaused('voice-1', false);
+    await status.setPaused('voice-1', true);
+
+    expect(put).toHaveBeenNthCalledWith(1, Routes.channelVoiceStatus('voice-1'), {
+      body: { status: 'paused' },
+    });
+    expect(put).toHaveBeenNthCalledWith(2, Routes.channelVoiceStatus('voice-1'), {
+      body: { status: 'paused - waiting for someone...' },
+    });
+  });
+
   it('limits the formatted status to 500 Unicode characters', async () => {
     const { put, status } = fixture();
 

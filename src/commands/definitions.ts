@@ -4,6 +4,8 @@ export const HELP_TEXT = [
   '**Musina commands**',
   '`/play <input>` — play a URL, playlist, UwUFUFU selections, or the best YouTube search match',
   '`/search <query>` — choose from the top five YouTube search results',
+  '`/pause` — pause playback',
+  '`/resume` — resume playback',
   '`/skip` — skip the current track',
   '`/stop` — stop playback and leave voice',
   '`/queue` — show the current and upcoming tracks',
@@ -12,7 +14,7 @@ export const HELP_TEXT = [
   '`/help` — show this guide',
   '',
   'You can also use a leading bot mention, such as `@Musina play <input>` or `@Musina search <query>`.',
-  'Join my active voice channel to use skip, stop, or shuffle.',
+  'Join my active voice channel to use pause, resume, skip, stop, or shuffle.',
 ].join('\n');
 
 export const commandDefinitions = [
@@ -34,6 +36,8 @@ export const commandDefinitions = [
         .setDescription('YouTube search terms')
         .setRequired(true),
     ),
+  new SlashCommandBuilder().setName('pause').setDescription('Pause playback'),
+  new SlashCommandBuilder().setName('resume').setDescription('Resume playback'),
   new SlashCommandBuilder().setName('skip').setDescription('Skip the current track'),
   new SlashCommandBuilder().setName('stop').setDescription('Stop playback and leave voice'),
   new SlashCommandBuilder().setName('queue').setDescription('Show the playback queue'),

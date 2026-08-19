@@ -6,6 +6,8 @@ describe('commandDefinitions', () => {
     expect(commandDefinitions.map((command) => command.name)).toEqual([
       'play',
       'search',
+      'pause',
+      'resume',
       'skip',
       'stop',
       'queue',

@@ -369,6 +369,8 @@ describe('createBot', () => {
   });
 
   it.each([
+    ['pause', 'Paused.'],
+    ['resume', 'Resumed.'],
     ['skip', 'Skipped.'],
     ['stop', 'Stopped playback and left voice.'],
     ['queue', 'Now: **One**'],
@@ -390,7 +392,9 @@ describe('createBot', () => {
     };
     const playback = {
       nowPlaying: vi.fn(() => 'Now playing **One**.'),
+      pause: vi.fn(() => 'Paused.'),
       queue: vi.fn(() => 'Now: **One**'),
+      resume: vi.fn(() => 'Resumed.'),
       shuffle: vi.fn(() => 'Shuffled 3 tracks.'),
       skip: vi.fn(() => 'Skipped.'),
       stop: vi.fn(() => 'Stopped playback and left voice.'),
@@ -404,6 +408,20 @@ describe('createBot', () => {
       allowedMentions: { repliedUser: false },
       content: result,
     }));
+    if (command === 'pause') expect(playback.pause).toHaveBeenCalledWith(message.member);
+    if (command === 'resume') expect(playback.resume).toHaveBeenCalledWith(message.member);
+  });
+
+  it('forwards voice state updates to playback', () => {
+    const client = new EventEmitter();
+    const playback = { handleVoiceStateUpdate: vi.fn() };
+    const oldState = { channelId: 'voice-1' };
+    const newState = { channelId: null };
+    createBot(playback as never, { info: vi.fn() } as never, client as never);
+
+    client.emit('voiceStateUpdate', oldState, newState);
+
+    expect(playback.handleVoiceStateUpdate).toHaveBeenCalledWith(oldState, newState);
   });
 
   it('supports UwUFUFU batch playback through a mention-prefixed play command', async () => {
