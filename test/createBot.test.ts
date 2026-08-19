@@ -184,6 +184,65 @@ describe('createBot', () => {
     expect(playback.search).toHaveBeenCalledWith('synthwave');
   });
 
+  it('replies to slash queue with the live first page and controls', async () => {
+    const client = new EventEmitter();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const interaction = {
+      channel: { isSendable: () => true },
+      commandName: 'queue',
+      guildId: 'guild-1',
+      inCachedGuild: () => true,
+      isChatInputCommand: () => true,
+      reply,
+      user: { id: 'user-1' },
+    };
+    const playback = {
+      queuePage: vi.fn(() => ({ content: 'Now: **One**\n1. Two', page: 0, totalPages: 2 })),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith(expect.objectContaining({
+      components: expect.any(Array),
+      content: 'Now: **One**\n1. Two',
+    })));
+    expect(playback.queuePage).toHaveBeenCalledWith('guild-1', 0);
+  });
+
+  it('replies to mention queue with the live first page and requester-bound controls', async () => {
+    const client = new EventEmitter();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const message = {
+      author: { bot: false, id: '1001' },
+      channel: { isSendable: () => true },
+      client: { user: { id: 'bot-1' } },
+      content: '<@bot-1> queue',
+      guildId: 'guild-1',
+      inGuild: () => true,
+      member: { id: 'member-1' },
+      mentions: { users: { has: (id: string) => id === 'bot-1' } },
+      reply,
+    };
+    const playback = {
+      queuePage: vi.fn(() => ({ content: 'Now: **One**\n1. Two', page: 0, totalPages: 2 })),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('messageCreate', message);
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith(expect.objectContaining({
+      allowedMentions: { repliedUser: false },
+      components: expect.any(Array),
+      content: 'Now: **One**\n1. Two',
+    })));
+    expect(playback.queuePage).toHaveBeenCalledWith('guild-1', 0);
+    const [queueReply] = reply.mock.calls[0]!;
+    expect(queueReply.components[0].toJSON().components[0].custom_id).toContain(message.author.id);
+  });
+
   it('rejects an empty mention search before provider work', async () => {
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);
@@ -350,6 +409,62 @@ describe('createBot', () => {
     expect(interaction.editReply).not.toHaveBeenCalled();
   });
 
+  it('rejects queue navigation from a user other than the requester', async () => {
+    const client = new EventEmitter();
+    const unauthorized = {
+      customId: 'musina-queue:v1:1001:4',
+      isButton: () => true,
+      isChatInputCommand: () => false,
+      isStringSelectMenu: () => false,
+      reply: vi.fn().mockResolvedValue(undefined),
+      user: { id: '1002' },
+    };
+    const playback = { queuePage: vi.fn() };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', unauthorized);
+
+    await vi.waitFor(() => expect(unauthorized.reply).toHaveBeenCalledWith({
+      content: 'Only the user who requested this queue can change pages.',
+      ephemeral: true,
+    }));
+    expect(playback.queuePage).not.toHaveBeenCalled();
+  });
+
+  it('updates queue navigation from a fresh clamped page result', async () => {
+    const client = new EventEmitter();
+    const deferUpdate = vi.fn().mockResolvedValue(undefined);
+    const editReply = vi.fn().mockResolvedValue(undefined);
+    const interaction = {
+      channel: { isSendable: () => true },
+      customId: 'musina-queue:v1:1001:4',
+      deferUpdate,
+      editReply,
+      guildId: 'guild-1',
+      inCachedGuild: () => true,
+      isButton: () => true,
+      isChatInputCommand: () => false,
+      isStringSelectMenu: () => false,
+      reply: vi.fn().mockResolvedValue(undefined),
+      user: { id: '1001' },
+    };
+    const playback = {
+      queuePage: vi.fn(() => ({ content: 'Now: **Live**', page: 0, totalPages: 1 })),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never);
+
+    client.emit('interactionCreate', interaction);
+
+    await vi.waitFor(() => expect(editReply).toHaveBeenCalledWith({
+      components: [],
+      content: 'Now: **Live**',
+    }));
+    expect(deferUpdate).toHaveBeenCalled();
+    expect(playback.queuePage).toHaveBeenCalledWith('guild-1', 4);
+  });
+
   it('replies to the help slash command with an ephemeral command guide', async () => {
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);
@@ -425,7 +540,6 @@ describe('createBot', () => {
     ['resume', 'Resumed.'],
     ['skip', 'Skipped.'],
     ['stop', 'Stopped playback and left voice.'],
-    ['queue', 'Now: **One**'],
     ['nowplaying', 'Now playing **One**.'],
     ['shuffle', 'Shuffled 3 tracks.'],
   ])('dispatches a mention-prefixed %s command to playback', async (command, result) => {

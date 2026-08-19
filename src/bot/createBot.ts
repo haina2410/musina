@@ -2,6 +2,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type GuildMember,
   type Message,
@@ -11,6 +12,7 @@ import {
 import type { Logger } from 'pino';
 import { HELP_TEXT } from '../commands/definitions.js';
 import { parseMentionCommand } from '../commands/mention.js';
+import { buildQueueButtons, parseQueueButtonId } from '../commands/queueButtons.js';
 import { buildSearchMenu, parseSearchMenuId } from '../commands/searchMenu.js';
 import type { ImportProgressCallback, PlaybackManager } from '../playback/PlaybackManager.js';
 import { PlayInput, type ResolvedPlayInput } from '../playback/PlayInput.js';
@@ -41,6 +43,8 @@ export function createBot(
       void handleCommand(interaction, playback, playInput, logger);
     } else if (interaction.isStringSelectMenu()) {
       void handleSearchSelection(interaction, playback, logger);
+    } else if (interaction.isButton()) {
+      void handleQueueButton(interaction, playback);
     }
   });
   client.on('messageCreate', (message) => void handleMessage(message, playback, playInput, logger));
@@ -92,6 +96,10 @@ async function handleCommand(
       await interaction.reply({ content: HELP_TEXT, ephemeral: true });
       return;
     }
+    if (interaction.commandName === 'queue') {
+      await interaction.reply(queueReply(playback, interaction.guildId, interaction.user.id));
+      return;
+    }
     const member = interaction.member as GuildMember;
     const result = runPlaybackCommand(interaction.commandName, playback, member, interaction.guildId);
     await interaction.reply({ content: result });
@@ -139,7 +147,22 @@ async function handleMessage(
     }
     return;
   }
-  if (command && ['pause', 'resume', 'skip', 'stop', 'queue', 'nowplaying', 'shuffle'].includes(command.name)) {
+  if (command?.name === 'queue') {
+    try {
+      await message.reply({
+        ...queueReply(playback, message.guildId, message.author.id),
+        allowedMentions: { repliedUser: false },
+      });
+    } catch (error) {
+      logger.warn({ error, command: 'queue' }, 'message command failed');
+      await message.reply({
+        content: error instanceof Error ? error.message : 'Something went wrong.',
+        allowedMentions: { repliedUser: false },
+      });
+    }
+    return;
+  }
+  if (command && ['pause', 'resume', 'skip', 'stop', 'nowplaying', 'shuffle'].includes(command.name)) {
     try {
       const result = runPlaybackCommand(command.name, playback, message.member!, message.guildId);
       await message.reply({ content: result, allowedMentions: { repliedUser: false } });
@@ -242,6 +265,30 @@ async function handleSearchSelection(
   }
 }
 
+async function handleQueueButton(
+  interaction: ButtonInteraction,
+  playback: PlaybackManager,
+): Promise<void> {
+  const button = parseQueueButtonId(interaction.customId);
+  if (!button) return;
+  if (interaction.user.id !== button.requesterId) {
+    await interaction.reply({
+      content: 'Only the user who requested this queue can change pages.',
+      ephemeral: true,
+    });
+    return;
+  }
+  if (!interaction.inCachedGuild() || !interaction.channel?.isSendable()) {
+    await interaction.reply({
+      content: 'This queue only works in a server text channel.',
+      ephemeral: true,
+    });
+    return;
+  }
+  await interaction.deferUpdate();
+  await interaction.editReply(queueReply(playback, interaction.guildId, interaction.user.id, button.page));
+}
+
 async function runPlayInput(
   input: ResolvedPlayInput,
   playback: PlaybackManager,
@@ -267,6 +314,19 @@ async function searchReply(playback: PlaybackManager, query: string, requesterId
   };
 }
 
+function queueReply(
+  playback: PlaybackManager,
+  guildId: string,
+  requesterId: string,
+  requestedPage = 0,
+) {
+  const result = playback.queuePage(guildId, requestedPage);
+  return {
+    content: result.content,
+    components: buildQueueButtons(requesterId, result.page, result.totalPages),
+  };
+}
+
 function runPlaybackCommand(
   commandName: string,
   playback: PlaybackManager,
@@ -278,7 +338,6 @@ function runPlaybackCommand(
     case 'resume': return playback.resume(member);
     case 'skip': return playback.skip(member);
     case 'stop': return playback.stop(member);
-    case 'queue': return playback.queue(guildId);
     case 'nowplaying': return playback.nowPlaying(guildId);
     case 'shuffle': return playback.shuffle(member);
     default: throw new Error('Unsupported command.');
