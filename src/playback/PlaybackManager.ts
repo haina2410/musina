@@ -220,7 +220,11 @@ export class PlaybackManager {
       player, queue: [], statusActive: false, textChannel,
     };
     connection.subscribe(player);
-    player.on(AudioPlayerStatus.Idle, () => this.advance(channel.guild.id, session));
+    player.on(AudioPlayerStatus.Idle, () => {
+      if (this.sessions.get(channel.guild.id) === session) {
+        this.advance(channel.guild.id, session);
+      }
+    });
     player.on('error', (error) => {
       this.logger.error({ error, guildId: channel.guild.id }, 'audio player error');
       void session.textChannel.send({ content: 'Playback failed; trying the next track.', allowedMentions: { parse: [] } });
@@ -249,10 +253,12 @@ export class PlaybackManager {
   }
 
   private advance(guildId: string, session: Session): void {
+    if (this.sessions.get(guildId) !== session) return;
     session.activeAudio?.cleanup();
     session.activeAudio = null;
     session.current = session.queue.shift() ?? null;
     if (session.current) {
+      if (session.emptyPaused) return;
       this.play(session);
       void session.textChannel.send({
         content: `Now playing **${this.safeTitle(session.current.title)}**.`,
@@ -261,18 +267,21 @@ export class PlaybackManager {
       return;
     }
     this.clearStatus(session);
+    if (session.emptyTimer) clearTimeout(session.emptyTimer);
+    session.emptyTimer = null;
+    if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => this.destroy(guildId, session), this.idleDisconnectMs);
   }
 
   private destroy(guildId: string, session: Session): void {
     if (this.sessions.get(guildId) !== session) return;
+    this.sessions.delete(guildId);
     if (session.idleTimer) clearTimeout(session.idleTimer);
     if (session.emptyTimer) clearTimeout(session.emptyTimer);
     this.clearStatus(session);
     session.activeAudio?.cleanup();
-    session.player.stop();
+    session.player.stop(true);
     session.connection.destroy();
-    this.sessions.delete(guildId);
   }
 
   private handleEmptyChannel(guildId: string, session: Session): void {
@@ -290,6 +299,10 @@ export class PlaybackManager {
     session.emptyPaused = false;
     if (session.manualPaused) {
       void this.voiceStatus.setPaused(session.channelId, false);
+      return;
+    }
+    if (!session.activeAudio) {
+      this.play(session);
       return;
     }
     session.player.unpause();

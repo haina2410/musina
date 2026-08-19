@@ -378,4 +378,58 @@ describe('PlaybackManager voice channel status', () => {
     expect(voiceStatus.setPaused).toHaveBeenCalledOnce();
     expect(voice.connection.destroy).toHaveBeenCalledOnce();
   });
+
+  it('force-stops teardown and ignores a stale Idle callback', async () => {
+    vi.useFakeTimers();
+    const { guild, inspect, manager, member, textChannel, voiceChannel } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+    voiceChannel.members.clear();
+
+    manager.handleVoiceStateUpdate(
+      { channelId: 'voice-1', guild } as never,
+      { channelId: null, guild } as never,
+    );
+    await vi.advanceTimersByTimeAsync(300_000);
+    const playsAtTeardown = voice.player.play.mock.calls.length;
+    idle();
+
+    expect(voice.player.stop).toHaveBeenLastCalledWith(true);
+    expect(voice.player.play).toHaveBeenCalledTimes(playsAtTeardown);
+    expect(manager.queue('guild-1')).toBe('Nothing is playing.');
+  });
+
+  it('holds an empty-paused queue on Idle until a listener returns', async () => {
+    vi.useFakeTimers();
+    const { guild, inspect, manager, member, textChannel, voiceChannel, voiceStatus } = fixture();
+    inspect
+      .mockResolvedValueOnce(track('https://youtu.be/one', 'One'))
+      .mockResolvedValueOnce(track('https://youtu.be/two', 'Two'));
+    await manager.enqueue(member, textChannel, 'one');
+    await manager.enqueue(member, textChannel, 'two');
+    const idle = voice.player.on.mock.calls.find(([event]) => event === 'idle')?.[1];
+    voiceChannel.members.clear();
+
+    manager.handleVoiceStateUpdate(
+      { channelId: 'voice-1', guild } as never,
+      { channelId: null, guild } as never,
+    );
+    idle();
+
+    expect(voice.player.play).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    voiceChannel.members.set('user-1', member);
+    manager.handleVoiceStateUpdate(
+      { channelId: null, guild } as never,
+      { channelId: 'voice-1', guild } as never,
+    );
+
+    expect(voice.player.play).toHaveBeenCalledTimes(2);
+    expect(voiceStatus.set).toHaveBeenLastCalledWith('voice-1', 'Two');
+  });
 });
