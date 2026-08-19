@@ -170,6 +170,56 @@ describe('createBot', () => {
     );
   });
 
+  it('supports YouTube playlist playback through a mention-prefixed play command', async () => {
+    const playlistUrl = 'https://www.youtube.com/watch?v=oMGPJ4uE_W8&list=RDoMGPJ4uE_W8&start_radio=1';
+    const client = new EventEmitter();
+    const reply = vi.fn().mockResolvedValue(undefined);
+    const channel = { isSendable: () => true, sendTyping: vi.fn().mockResolvedValue(undefined) };
+    const member = { id: 'member-1' };
+    const message = {
+      author: { bot: false },
+      channel,
+      client: { user: { id: 'bot-1' } },
+      content: `<@bot-1> play ${playlistUrl}`,
+      guildId: 'guild-1',
+      inGuild: () => true,
+      member,
+      mentions: { users: { has: (id: string) => id === 'bot-1' } },
+      reply,
+    };
+    const playback = {
+      enqueueMany: vi.fn().mockResolvedValue('Imported 2 tracks (0 skipped). Now playing **One**.'),
+    };
+    const playInput = {
+      resolve: vi.fn().mockResolvedValue({
+        kind: 'batch',
+        skipped: 0,
+        urls: [
+          'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
+          'https://www.youtube.com/watch?v=abcdefghijk',
+        ],
+      }),
+    };
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    createBot(playback as never, logger as never, client as never, playInput as never);
+
+    client.emit('messageCreate', message);
+
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({
+      allowedMentions: { repliedUser: false },
+      content: 'Imported 2 tracks (0 skipped). Now playing **One**.',
+    }));
+    expect(playback.enqueueMany).toHaveBeenCalledWith(
+      member,
+      channel,
+      [
+        'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
+        'https://www.youtube.com/watch?v=abcdefghijk',
+      ],
+      0,
+    );
+  });
+
   it('preserves mention-with-link playback shorthand', async () => {
     const client = new EventEmitter();
     const reply = vi.fn().mockResolvedValue(undefined);

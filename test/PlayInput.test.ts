@@ -5,13 +5,40 @@ import { PlayInput } from '../src/playback/PlayInput.js';
 describe('PlayInput', () => {
   it('leaves an ordinary media URL as one track without fetching UwUFUFU', async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error('must not fetch'));
-    const input = new PlayInput(new UwufufuImporter(fetcher));
+    const youtubePlaylist = { load: vi.fn().mockRejectedValue(new Error('must not load playlist')) };
+    const input = new PlayInput(new UwufufuImporter(fetcher), youtubePlaylist);
 
     await expect(input.resolve('https://youtu.be/abc')).resolves.toEqual({
       kind: 'single',
       url: 'https://youtu.be/abc',
     });
     expect(fetcher).not.toHaveBeenCalled();
+    expect(youtubePlaylist.load).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'https://www.youtube.com/watch?v=oMGPJ4uE_W8&list=RDoMGPJ4uE_W8&start_radio=1',
+    'https://www.youtube.com/playlist?list=PL123',
+  ])('loads %s as an ordered YouTube batch', async (url) => {
+    const youtubePlaylist = {
+      load: vi.fn().mockResolvedValue({
+        skipped: 1,
+        urls: [
+          'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
+          'https://www.youtube.com/watch?v=abcdefghijk',
+        ],
+      }),
+    };
+    const input = new PlayInput(new UwufufuImporter(), youtubePlaylist);
+
+    await expect(input.resolve(url)).resolves.toEqual({
+      kind: 'batch',
+      skipped: 1,
+      urls: [
+        'https://www.youtube.com/watch?v=oMGPJ4uE_W8',
+        'https://www.youtube.com/watch?v=abcdefghijk',
+      ],
+    });
   });
 
   it('loads an UwUFUFU selections URL as an ordered batch', async () => {

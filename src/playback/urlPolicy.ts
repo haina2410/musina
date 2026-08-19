@@ -3,6 +3,20 @@ const SOUNDCLOUD_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com', 'm.sou
 
 export type SupportedSource = 'youtube' | 'soundcloud';
 
+export function isYoutubePlaylistUrl(input: string): boolean {
+  try {
+    const url = new URL(input);
+    return url.protocol === 'https:'
+      && YOUTUBE_HOSTS.has(url.hostname.toLowerCase())
+      && !url.username
+      && !url.password
+      && !url.port
+      && Boolean(url.searchParams.get('list')?.trim());
+  } catch {
+    return false;
+  }
+}
+
 export function validateMediaUrl(input: string): { source: SupportedSource; url: string } {
   let url: URL;
   try {
@@ -16,7 +30,6 @@ export function validateMediaUrl(input: string): { source: SupportedSource; url:
     throw new Error('Only standard HTTPS links are supported.');
   }
   if (YOUTUBE_HOSTS.has(hostname)) {
-    if (url.searchParams.has('list')) throw new Error('Playlists are not supported yet.');
     return { source: 'youtube', url: url.toString() };
   }
   if (SOUNDCLOUD_HOSTS.has(hostname)) return { source: 'soundcloud', url: url.toString() };

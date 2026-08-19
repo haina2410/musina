@@ -29,8 +29,8 @@ export function createBot(
   playback: PlaybackManager,
   logger: Logger,
   client = createDiscordClient(),
+  playInput = new PlayInput(),
 ): Client {
-  const playInput = new PlayInput();
   client.on(Events.ClientReady, (readyClient) => logger.info({ user: readyClient.user.tag }, 'bot ready'));
   client.on('interactionCreate', (interaction) => {
     if (interaction.isChatInputCommand()) void handleCommand(interaction, playback, playInput, logger);
@@ -103,7 +103,7 @@ async function handleMessage(
   const input = command?.name === 'play' ? command.argument : findSupportedUrl(message.content);
   if (!input) {
     const content = command?.name === 'play'
-      ? 'Provide one YouTube, SoundCloud, or UwUFUFU selections HTTPS link.'
+      ? 'Provide one YouTube, YouTube playlist, SoundCloud, or UwUFUFU selections HTTPS link.'
       : 'Unknown command. Mention me with `help` to see available commands.';
     await message.reply({ content, allowedMentions: { repliedUser: false } });
     return;
